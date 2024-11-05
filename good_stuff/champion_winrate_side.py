@@ -20,15 +20,20 @@ win_rates['win_rate_percent'] = (win_rates['win'] * 100).round(2)
 n_games = df.groupby(['champion', 'side']).size().reset_index(name='n_games')
 win_rates = pd.merge(win_rates, n_games, on=['champion', 'side'])
 
-# Calculate win_rate_diff between blue and red sides (absolute value)
+# Calculate win_rate_diff and determine the side with the advantage
 blue_win_rates = win_rates[win_rates['side'] == 'Blue'].set_index('champion')
 red_win_rates = win_rates[win_rates['side'] == 'Red'].set_index('champion')
 
-win_rate_diff = (blue_win_rates['win_rate_percent'] - red_win_rates['win_rate_percent']).abs().round(1)
+# Calculate the win rate difference and determine which side has the advantage
+win_rate_diff = blue_win_rates['win_rate_percent'] - red_win_rates['win_rate_percent']
 win_rate_diff_df = pd.DataFrame({
     'champion': win_rate_diff.index,
-    'win_rate_diff': 'Δ ' + win_rate_diff.astype(str) + '%'
+    'win_rate_diff': win_rate_diff.abs().round(1),
+    'advantage_side': ['Blue' if diff > 0 else 'Red' for diff in win_rate_diff],
+    'display_text': ['+{}%'.format(abs(diff)) for diff in win_rate_diff.round(1)],
+    'color': ['#2b93b6' if diff > 0 else '#e54635' for diff in win_rate_diff]  # Set color based on advantage
 }).reset_index(drop=True)
+
 
 # Merge win_rate_diff into the original DataFrame
 win_rates = pd.merge(win_rates, win_rate_diff_df, on='champion', how='left')
@@ -79,9 +84,11 @@ p.xgrid.grid_line_color = None
 midline = Span(location=50, dimension='width', line_color='black', line_dash='dashed', line_width=2)
 p.add_layout(midline)
 
-# Add labels for win rate difference, positioned above the bars
-labels = LabelSet(x='champion', y=blue_data['win_rate_percent'].max() + 5, text='win_rate_diff',
-                  source=label_source, text_align='center', text_font_size="10pt")
+# Add labels for win rate difference with color based on advantage side
+labels = LabelSet(x='champion', y=blue_data['win_rate_percent'].max() + 5, text='display_text',
+                  source=label_source, text_align='center', text_font_size="10pt",
+                  text_color='color')  # Use the 'color' column for text color
+
 
 p.add_layout(labels)
 
