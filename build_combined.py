@@ -2,6 +2,7 @@ from bokeh.plotting import curdoc
 from bokeh.models import Select, Div
 from bokeh.layouts import column
 import pandas as pd
+import requests
 
 # Load the data
 file_path = 'cleaned_data.csv'  # Replace with your actual file path
@@ -26,6 +27,24 @@ data['win'] = data['win'].astype(bool)
 
 # Prepare the initial champion
 initial_champion = data['champion'].unique()[0]
+
+# Load Summoner Spell Data from Data Dragon
+summoner_spells_data = requests.get(
+    "https://ddragon.leagueoflegends.com/cdn/14.20.1/data/en_US/summoner.json"
+).json()
+summoner_spells_mapping = {
+    spell_data['id']: spell_data['image']['full'] for spell_data in summoner_spells_data['data'].values()
+}
+
+# Load Item Data from Data Dragon
+item_data = requests.get(
+    "https://ddragon.leagueoflegends.com/cdn/14.20.1/data/en_US/item.json"
+).json()
+item_mapping = {item_name: item_id for item_id, item_data in item_data['data'].items() for item_name in [item_data['name']]}
+
+# Base URLs for icons
+summoner_spell_icon_base_url = "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/"
+item_icon_base_url = "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/item/"
 
 # Filter item categories
 full_items = set(items_data[items_data['Category'] == 'Full Item']['Item'])
@@ -97,13 +116,32 @@ def update_results(champion):
     
     # Items Section
     text += "<h4>Items</h4>"
-    text += f"<p><b>Starter:</b> {starter_items_stats['item'].values[0]} - {starter_items_stats['count'].values[0]} games, {starter_items_stats['win_rate'].values[0]}% win rate</p>" if not starter_items_stats.empty else "<p><b>Starter:</b> None</p>"
-    text += f"<p><b>Boots:</b> {boots_stats['item'].values[0]} - {boots_stats['count'].values[0]} games, {boots_stats['win_rate'].values[0]}% win rate</p>" if not boots_stats.empty else "<p><b>Boots:</b> None</p>"
+    if not starter_items_stats.empty:
+        starter_icon = item_mapping.get(starter_items_stats['item'].values[0], "")
+        text += (
+            f'<p><b>Starter:</b> <img src="{item_icon_base_url}{starter_icon}.png" alt="{starter_icon}" width="32" height="32">'
+            f' - {starter_items_stats["count"].values[0]} games, {starter_items_stats["win_rate"].values[0]}% win rate</p>'
+        )
+    if not boots_stats.empty:
+        boots_icon = item_mapping.get(boots_stats['item'].values[0], "")
+        text += (
+            f'<p><b>Boots:</b> <img src="{item_icon_base_url}{boots_icon}.png" alt="{boots_icon}" width="32" height="32">'
+            f' - {boots_stats["count"].values[0]} games, {boots_stats["win_rate"].values[0]}% win rate</p>'
+        )
     text += "<p><b>Full Items:</b><br>"
     for _, row in full_items_stats.iterrows():
-        text += f"- {row['item']} - {row['count']} games, {row['win_rate']}% win rate<br>"
-    text += f"<b>Trinket:</b> {trinket_stats['item'].values[0]} - {trinket_stats['count'].values[0]} games, {trinket_stats['win_rate'].values[0]}% win rate</p>" if not trinket_stats.empty else "<p><b>Trinket:</b> None</p>"
-    
+        item_icon = item_mapping.get(row['item'], "")
+        text += (
+            f'- <img src="{item_icon_base_url}{item_icon}.png" alt="{row["item"]}" width="32" height="32">'
+            f' {row["item"]} - {row["count"]} games, {row["win_rate"]}% win rate<br>'
+        )
+    if not trinket_stats.empty:
+        trinket_icon = item_mapping.get(trinket_stats['item'].values[0], "")
+        text += (
+            f'<b>Trinket:</b> <img src="{item_icon_base_url}{trinket_icon}.png" alt="{trinket_icon}" width="32" height="32">'
+            f' - {trinket_stats["count"].values[0]} games, {trinket_stats["win_rate"].values[0]}% win rate</p>'
+        )
+
     # Runes Section
     text += "<h4>Runes</h4><p>"
     for col, stats in runes.items():
@@ -111,10 +149,18 @@ def update_results(champion):
             text += f"<b>{col.replace('_', ' ').title()}:</b> {stats[col]} - {stats['count']} games, {stats['win_rate']}% win rate<br>"
     text += "</p>"
     
-    # Summoner Spells Section
+    # Summoner Spells Section with Icons
     text += "<h4>Summoner Spells</h4>"
     if spells is not None:
-        text += f"<p>{spells['summoner1_id']} + {spells['summoner2_id']} - {spells['count']} games, {spells['win_rate']}% win rate</p>"
+        spell1_name = f"Summoner{spells['summoner1_id']}"
+        spell2_name = f"Summoner{spells['summoner2_id']}"
+        spell1_icon = summoner_spells_mapping.get(spell1_name, "")
+        spell2_icon = summoner_spells_mapping.get(spell2_name, "")
+        text += (
+            f'<p><img src="{summoner_spell_icon_base_url}{spell1_icon}" alt="{spell1_name}" width="32" height="32">'
+            f' + <img src="{summoner_spell_icon_base_url}{spell2_icon}" alt="{spell2_name}" width="32" height="32">'
+            f' - {spells["count"]} games, {spells["win_rate"]}% win rate</p>'
+        )
     else:
         text += "<p>None</p>"
     
