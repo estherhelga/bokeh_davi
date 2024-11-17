@@ -35,6 +35,10 @@ summoner_spells_data = requests.get(
 summoner_spells_mapping = {
     spell_data['id']: spell_data['image']['full'] for spell_data in summoner_spells_data['data'].values()
 }
+# Special cases for summoner spell icons
+summoner_spell_exceptions = {
+    "SummonerIgnite": "SummonerDot.png"
+}
 
 # Load Item Data from Data Dragon
 item_data = requests.get(
@@ -42,9 +46,26 @@ item_data = requests.get(
 ).json()
 item_mapping = {item_name: item_id for item_id, item_data in item_data['data'].items() for item_name in [item_data['name']]}
 
+# Load Runes Data from Data Dragon
+runes_data = requests.get(
+    "https://ddragon.leagueoflegends.com/cdn/14.20.1/data/en_US/runesReforged.json"
+).json()
+
+# Build rune mappings
+runes_mapping = {}
+
+for style in runes_data:
+    # Map primary style icons
+    runes_mapping[style['name']] = style['icon']
+    # Map keystone and minor runes within each style
+    for slot in style['slots']:
+        for rune in slot['runes']:
+            runes_mapping[rune['name']] = rune['icon']
+
 # Base URLs for icons
 summoner_spell_icon_base_url = "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/spell/"
 item_icon_base_url = "https://ddragon.leagueoflegends.com/cdn/14.20.1/img/item/"
+rune_icon_base_url = "https://ddragon.leagueoflegends.com/cdn/img/"
 
 # Filter item categories
 full_items = set(items_data[items_data['Category'] == 'Full Item']['Item'])
@@ -146,7 +167,12 @@ def update_results(champion):
     text += "<h4>Runes</h4><p>"
     for col, stats in runes.items():
         if stats is not None:
-            text += f"<b>{col.replace('_', ' ').title()}:</b> {stats[col]} - {stats['count']} games, {stats['win_rate']}% win rate<br>"
+            rune_icon = runes_mapping.get(stats[col], "")  # Fetch icon using rune name
+            text += (
+                f'<b>{col.replace("_", " ").title()}:</b> '
+                f'<img src="{rune_icon_base_url}{rune_icon}" alt="{stats[col]}" width="32" height="32"> '
+                f'{stats[col]} - {stats["count"]} games, {stats["win_rate"]}% win rate<br>'
+            )
     text += "</p>"
     
     # Summoner Spells Section with Icons
@@ -154,8 +180,8 @@ def update_results(champion):
     if spells is not None:
         spell1_name = f"Summoner{spells['summoner1_id']}"
         spell2_name = f"Summoner{spells['summoner2_id']}"
-        spell1_icon = summoner_spells_mapping.get(spell1_name, "")
-        spell2_icon = summoner_spells_mapping.get(spell2_name, "")
+        spell1_icon = summoner_spell_exceptions.get(spell1_name, summoner_spells_mapping.get(spell1_name, ""))
+        spell2_icon = summoner_spell_exceptions.get(spell2_name, summoner_spells_mapping.get(spell2_name, ""))
         text += (
             f'<p><img src="{summoner_spell_icon_base_url}{spell1_icon}" alt="{spell1_name}" width="32" height="32">'
             f' + <img src="{summoner_spell_icon_base_url}{spell2_icon}" alt="{spell2_name}" width="32" height="32">'
