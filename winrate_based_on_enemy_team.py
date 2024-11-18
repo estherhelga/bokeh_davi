@@ -173,4 +173,4 @@ enemy_champion_select.on_change('value', update_plot)
 
 # Layout and display
 layout = column(champion_select, enemy_role_select, min_games_input, enemy_champion_select, p)
-curdoc().add_root(layout)
+#curdoc().add_root(layout)

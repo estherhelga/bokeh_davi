@@ -182,7 +182,7 @@ ally_select.on_change('value', update_plot)
 layout = column(champion_select, role_select, ally_role_select, min_games_slider, ally_select, p)
 
 # Add layout to document
-curdoc().add_root(layout)
+#curdoc().add_root(layout)
 
 
 
