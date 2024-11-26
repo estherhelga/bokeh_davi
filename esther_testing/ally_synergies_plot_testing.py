@@ -1,18 +1,23 @@
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool, Select, Slider, Span
+from bokeh.models import ColumnDataSource, HoverTool, Span
 
 # Load data
 file_path = 'cleaned_data.csv'
 df = pd.read_csv(file_path)
 df['win'] = df['win'].astype(bool)
+print("Data loaded for synergies plot:", df.shape)
 
 # Shared variables
-min_games_slider = Slider(title="Minimum Games", value=30, start=10, end=100, step=10)
+min_games = 30
 
 # Function to calculate win rates
 def calculate_win_rates(champion, role, min_games):
     filtered_df = df[(df['champion'] == champion) & (df['team_position'] == role)]
+    if filtered_df.empty:
+        print("No data for champion:", champion, "and role:", role)
+        return pd.DataFrame()
+
     ally_columns = ['ally_1', 'ally_2', 'ally_3', 'ally_4', 'ally_5']
     ally_win_rates = pd.concat(
         [filtered_df.groupby(col)['win'].agg(['mean', 'size']).reset_index() for col in ally_columns]
@@ -37,7 +42,7 @@ p.add_layout(midline)
 
 # Update function
 def update_plot(champion, role):
-    min_games = min_games_slider.value
+    print("Updating synergies plot with champion:", champion, "and role:", role)
     updated_win_rates = calculate_win_rates(champion, role, min_games)
     source.data = ColumnDataSource.from_df(updated_win_rates)
     p.x_range.factors = list(updated_win_rates['ally_champion'])
@@ -45,8 +50,3 @@ def update_plot(champion, role):
 
 # Final layout
 layout = p
-
-
-
-
-

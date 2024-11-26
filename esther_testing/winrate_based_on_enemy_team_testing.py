@@ -1,27 +1,23 @@
 import pandas as pd
 from bokeh.plotting import figure
-from bokeh.models import ColumnDataSource, HoverTool, TextInput, Select, Span
+from bokeh.models import ColumnDataSource, HoverTool, Span
 
 # Load data
 file_path = 'cleaned_data.csv'
 df = pd.read_csv(file_path)
 df['win'] = df['win'].astype(bool)
-
-enemy_role_map = {
-    "TOP": "enemy_1",
-    "JUNGLE": "enemy_2",
-    "MIDDLE": "enemy_3",
-    "BOTTOM": "enemy_4",
-    "SUPPORT": "enemy_5",
-    "ANY": None
-}
+print("Data loaded for winrate plot:", df.shape)
 
 # Shared variables
-min_games_input = TextInput(title="Minimum Games Threshold:", value="10")
+min_games = 10
 
 # Function to calculate win rates
 def calculate_win_rates(champion, role, min_games):
     champion_df = df[(df['champion'] == champion) & (df['team_position'] == role)]
+    if champion_df.empty:
+        print("No data for champion:", champion, "and role:", role)
+        return pd.DataFrame(), 0
+
     avg_win_rate = champion_df['win'].mean() * 100
 
     combined_df = pd.concat([
@@ -57,7 +53,7 @@ p.add_layout(avg_win_rate_line)
 
 # Update function
 def update_plot(champion, role):
-    min_games = int(min_games_input.value) if min_games_input.value.isdigit() else 10
+    print("Updating winrate plot with champion:", champion, "and role:", role)
     updated_win_rates, avg_win_rate = calculate_win_rates(champion, role, min_games)
     source.data = ColumnDataSource.from_df(updated_win_rates)
     p.x_range.factors = list(updated_win_rates['enemy_champion'])
