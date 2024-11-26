@@ -21,7 +21,7 @@ roles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUP']
 # Create shared widgets
 champion_select = Select(title="Select Your Champion:", value=champions[0], options=champions)
 role_select = Select(title="Select Your Role:", value=roles[0], options=roles)
-min_games_input = TextInput(title="Minimum Games Threshold:", value="10")
+min_games_input = TextInput(title="Minimum Games Threshold:", value="50")
 enemy_roles = ["ANY", "TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]
 enemy_role_select = Select(title="Enemy Role:", value="ANY", options=enemy_roles)
 enemy_champion_select = Select(title="Compare Against Specific Enemy:", value="", options=[])
@@ -74,16 +74,27 @@ def update_enemy_champion_options(attr, old, new):
 enemy_role_select.on_change('value', update_enemy_champion_options)
 
 # -------------------------------------------------------------------------------- #
-#               Creation of the Winrate against Enemies plot                       #
+# Creation of the Winrate against Enemies Plot                                     #
 # -------------------------------------------------------------------------------- #
 
 # Initialize empty data source for the plot
-winrate_source = ColumnDataSource(data=dict(enemy_champion=[], win_rate_percent=[], n_games=[], color=[]))
+winrate_source = ColumnDataSource(data=dict(enemy_champion=[], win_rate_percent=[], n_games=[], color=[], hatch=[]))
 
 # Function to create the Win Rate plot
 def create_winrate_plot():
     p = figure(x_range=[], height=400, title="Win Rate Against Enemies", toolbar_location=None, tools="")
-    p.vbar(x='enemy_champion', top='win_rate_percent', width=0.5, source=winrate_source, line_color="white", fill_color='color')
+    p.vbar(
+        x='enemy_champion',
+        top='win_rate_percent',
+        width=0.5,
+        source=winrate_source,
+        line_color="white",
+        fill_color='color',
+        hatch_pattern='hatch',
+        hatch_color="white",
+        hatch_alpha=0.5,
+        hatch_weight=2
+    )
 
     hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games")])
     p.add_tools(hover)
@@ -151,24 +162,30 @@ def update_winrate_plot_with_filters(attr, old, new):
     win_rates = win_rates[win_rates['n_games'] >= min_games]
 
     # Step 4: Sort by win rate and select top and bottom 5 matchups
+    # Ignoring SettingWithCopyWarning at the top_5 and bottom_5 because the application works as expected
+    # and modifying this logic breaks other parts of the code.
+
     win_rates_sorted = win_rates.sort_values(by="win_rate", ascending=False)
     top_5 = win_rates_sorted.head(5)
     bottom_5 = win_rates_sorted.tail(5)
 
-    # Add bar colors
+    # Add bar colors and hatch patterns
     top_5['color'] = '#2b93b6'  # Blue for top matchups
     bottom_5['color'] = '#e54635'  # Red for bottom matchups
+    top_5['hatch'] = ' '
+    bottom_5['hatch'] = ' '
 
     # Step 5: Include the selected enemy in the plot
     if selected_enemy and selected_enemy in win_rates['enemy_champion'].values:
         selected_enemy_row = win_rates[win_rates['enemy_champion'] == selected_enemy].copy()
-        selected_enemy_row['color'] = '#d3d3d3'  # Neutral gray for the selected enemy
+        selected_enemy_row['color'] = '#2b93b6' if selected_enemy_row['win_rate_percent'].iloc[0] > overall_avg_win_rate else '#e54635'
+        selected_enemy_row['hatch'] = '/'
         combined = pd.concat([top_5, bottom_5, selected_enemy_row]).drop_duplicates(subset=['enemy_champion'])
     else:
         combined = pd.concat([top_5, bottom_5])
 
-    # Ensure 'color' column exists for all rows in combined
-    combined['color'] = combined['color'].fillna('#d3d3d3')  # Default to gray for safety
+    # Fill missing hatches with blanks
+    combined['hatch'] = combined['hatch'].fillna(' ')
 
     # Step 6: Update the plot's data source
     combined = combined.sort_values(by="win_rate", ascending=False)  # Re-sort for display
@@ -180,28 +197,56 @@ def update_winrate_plot_with_filters(attr, old, new):
     avg_win_rate_line.location = overall_avg_win_rate
 
 # -------------------------------------------------------------------------------- #
+# Creation of Ally Synergies plot                                                                    #
+# -------------------------------------------------------------------------------- #
+
+
+
+# -------------------------------------------------------------------------------- #
+# Dummy Plots                                                                      #
+# -------------------------------------------------------------------------------- #
+
+# Create dummy plots
+dummy_plot1 = figure(height=400, width=400, title="Dummy Plot 1")
+dummy_plot2 = figure(height=400, width=400, title="Dummy Plot 2")
+dummy_plot3 = figure(height=400, width=400, title="Dummy Plot 3")
+
+# -------------------------------------------------------------------------------- #
 # Layout and Initial Update                                                        #
 # -------------------------------------------------------------------------------- #
 
+from bokeh.models import Spacer
+
+spacer = Spacer(width=300, height=100)  # Add a blank spacer
+
+# Create a layout for the enemy winrate plot with its widgets
+winrate_section = column(
+    row(champion_select, role_select),  # Widgets for champion and role
+    row(enemy_role_select, min_games_input, enemy_champion_select),  # Enemy-specific widgets
+    winrate_plot  # The plot itself
+)
+
+# Create the full 2x2 grid layout
 layout = column(
-    row(champion_select, role_select),
-    row(enemy_role_select, min_games_input, enemy_champion_select),
-    winrate_plot
+    row(winrate_section, spacer, dummy_plot1),  # Top row
+    row(dummy_plot2, spacer, dummy_plot3)       # Bottom row
 )
 
 # Attach callbacks
 champion_select.on_change('value', update_winrate_plot_with_filters)
 role_select.on_change('value', update_winrate_plot_with_filters)
 min_games_input.on_change('value', update_winrate_plot_with_filters)
-enemy_role_select.on_change('value', update_winrate_plot_with_filters)
+enemy_role_select.on_change('value', update_enemy_champion_options)
 enemy_champion_select.on_change('value', update_winrate_plot_with_filters)
 
 # Initial update
 update_enemy_champion_options(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
 
-# Add layout to curdoc
+# Add the layout to curdoc
+curdoc().clear()  # Clear any previous layouts
 curdoc().add_root(layout)
+
 
 
 
