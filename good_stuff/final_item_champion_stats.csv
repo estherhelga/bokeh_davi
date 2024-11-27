@@ -1,4 +1,5 @@
 item_name,occurrence_count,win_count,Category,champion,total_games_champion,role
+TrinityForce,8177,4039,Full Item,Gnar,8719,TOP
 Trinity Force,7177,4039,Full Item,Gnar,8719,TOP
 Stealth Ward,7009,3840,Trinket,Gnar,8719,TOP
 Black Cleaver,5095,2970,Full Item,Gnar,8719,TOP
@@ -149,6 +150,7 @@ Slightly Magical Footwear,1,1,Boots,Gnar,8719,TOP
 Fiendish Codex,1,0,Component,Gnar,8719,TOP
 Fated Ashes,1,1,Component,Gnar,8719,TOP
 Eye of the Herald,1,1,Consumable,Gnar,8719,TOP
+RavenousHydra,7000,3591,Full Item,Camille,7042,TOP
 Trinity Force,6822,4062,Full Item,Camille,7042,TOP
 Ravenous Hydra,5760,3591,Full Item,Camille,7042,TOP
 Stealth Ward,4980,2882,Trinket,Camille,7042,TOP

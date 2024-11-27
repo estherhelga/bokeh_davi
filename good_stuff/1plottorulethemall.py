@@ -497,6 +497,8 @@ def create_sina_plot():
         win_rate = []
         size = []
 
+        np.random.seed(42)
+
         for category in categories:
             category_data = champion_data[champion_data['Category'] == category]
             freq = category_data['frequency_percentage'].values
