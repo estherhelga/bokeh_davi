@@ -76,9 +76,11 @@ def add_ally_to_selection(attr, old, new):
     global selected_allies
     if new and new not in selected_allies and len(selected_allies) < 3:
         selected_allies.append(new)  # Add to selected allies
+        update_selected_allies_display()  # Update the indicator
         update_ally_synergy_plot(None, None, None)  # Update the plot
         update_ally_dropdown_options()  # Refresh the dropdown options
         ally_champion_select.value = ""  # Reset dropdown after selection
+
 
 def update_ally_dropdown_options():
     """Update the dropdown to exclude already-selected allies."""
@@ -91,7 +93,7 @@ def update_ally_dropdown_options():
         "SUP": "ally_5",
     }
     ally_column = role_column_map.get(ally_role)
-    
+
     # Ensure the ally column exists
     if not ally_column:
         ally_champion_select.options = []
@@ -104,6 +106,7 @@ def update_ally_dropdown_options():
     remaining_allies = [ally for ally in allies_in_role if ally not in selected_allies]
     ally_champion_select.options = sorted(remaining_allies)
 
+
 def remove_ally_from_selection(ally):
     """Remove an ally from the selected list and update the plot."""
     global selected_allies
@@ -111,6 +114,20 @@ def remove_ally_from_selection(ally):
         selected_allies.remove(ally)
         update_ally_dropdown_options()  # Refresh dropdown options
         update_ally_synergy_plot(None, None, None)  # Update the plot
+
+# Create buttons for each selected ally
+def update_selected_allies_display():
+    """Update the dynamic display of selected allies."""
+    global selected_allies
+    buttons = []
+    for ally in selected_allies:
+        button = Button(label=f"Remove {ally}", button_type="danger", width=150)
+        button.on_click(lambda ally=ally: remove_ally_from_selection(ally))
+        buttons.append(button)
+    selected_allies_display.children = buttons
+
+# Initialize the display
+selected_allies_display = column()
 
 
 # -------------------------------------------------------------------------------- #
@@ -346,10 +363,30 @@ def update_ally_synergy_plot(attr, old, new):
     ally_role = ally_role_select.value  # Get selected ally role
     ally_data = calculate_ally_synergies(champion_select.value, role_select.value, selected_allies, ally_role)
 
-    # Update the plot with new data
+    # Calculate overall winrate for the selected champion
+    overall_winrate = calculate_overall_win_rate(champion_select.value)
+
+    # Ensure selected allies are always shown, even if below winrate
+    for ally in selected_allies:
+        if ally not in ally_data['ally_champion'].values:
+            # Add missing ally with zero data
+            ally_data = pd.concat([ally_data, pd.DataFrame({
+                'ally_champion': [ally],
+                'win_rate_percent': [0],
+                'n_games': [0],
+                'color': ['#e54635']
+            })], ignore_index=True)
+
+    # Assign colors to all allies
+    ally_data['color'] = ally_data['win_rate_percent'].apply(
+        lambda x: '#2b93b6' if x >= overall_winrate else '#e54635'
+    )
+
+    # Update the plot
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
     ally_synergy_plot.title.text = f"Ally Synergies for {champion_select.value} ({role_select.value}) with Selected Allies"
+
 
 
 
@@ -456,8 +493,9 @@ selected_allies_display = column(*ally_buttons)
 layout = column(
     row(winrate_section, spacer, ally_synergy_section),
     row(dummy_plot_1, dummy_plot_2),
-    selected_allies_display
+    selected_allies_display  # Add the dynamic display for selected allies
 )
+
 
 # Attach callbacks
 champion_select.on_change('value', update_global_settings)
@@ -471,11 +509,12 @@ ally_min_games_input.on_change('value', update_ally_synergy_plot)
 ally_champion_select.on_change('value', add_ally_to_selection)
 
 # Initial update
-# Initial update
 update_enemy_champion_options(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
-update_ally_dropdown_options()  # Ensure dropdown options are initialized
 update_ally_synergy_plot_on_role(None, None, None)  # Initialize the ally plot
+update_ally_dropdown_options()  # Initialize dropdown options for selected ally role
+update_selected_allies_display()  # Ensure selected allies display is initialized
+
 
 
 # Add the layout to curdoc
