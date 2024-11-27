@@ -1,0 +1,65 @@
+import pandas as pd
+
+# Load the data
+cleaned_data = pd.read_csv('cleaned_data.csv')
+items_data = pd.read_csv('items.csv')
+
+# Melt item columns into a single column to process item occurrences and wins
+item_columns = ['item0', 'item1', 'item2', 'item3', 'item4', 'item5', 'item6']
+melted_items = cleaned_data.melt(
+    id_vars=['champion', 'win', 'uuid'],  # Include 'uuid' for unique game identification
+    value_vars=item_columns,
+    var_name='item_slot',
+    value_name='item_name'
+)
+
+# Drop rows with NaN items (nonexistent items in some slots)
+melted_items = melted_items.dropna(subset=['item_name'])
+
+# Remove duplicates to ensure unique items per game and champion
+unique_items_per_game = melted_items.drop_duplicates(subset=['uuid', 'champion', 'item_name'])
+
+# Add total games per champion
+total_games_per_champion = cleaned_data['champion'].value_counts()
+
+# Prepare final data list
+final_data = []
+
+# Process data for each champion
+for champion, total_games in total_games_per_champion.items():
+    # Filter the data for the current champion
+    champion_items = unique_items_per_game[unique_items_per_game['champion'] == champion]
+    
+    # Calculate occurrence count for the champion
+    occurrence_count = champion_items['item_name'].value_counts()
+    
+    # Calculate win count for the champion
+    win_count = champion_items[champion_items['win'] == True]['item_name'].value_counts()
+    
+    # Prepare the stats for the current champion
+    champion_stats = pd.DataFrame({
+        'item_name': occurrence_count.index,
+        'occurrence_count': occurrence_count.values,
+        'win_count': win_count.reindex(occurrence_count.index, fill_value=0).values
+    }).merge(items_data, left_on='item_name', right_on='Item', how='left')
+    
+    # Add champion and total games columns
+    champion_stats['champion'] = champion
+    champion_stats['total_games_champion'] = total_games
+    
+    # Append to the final data
+    final_data.append(champion_stats)
+
+# Combine all champion data
+final_data = pd.concat(final_data, ignore_index=True)
+
+# Drop the redundant 'Item' column from the merge
+final_data = final_data.drop(columns=['Item'])
+
+# Add the 'role' column with the value 'TOP'
+final_data['role'] = 'TOP'
+
+# Save to a CSV
+final_data.to_csv('final_item_champion_stats.csv', index=False)
+
+print("Data has been processed and saved to 'final_item_champion_stats.csv'.")
