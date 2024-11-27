@@ -2,6 +2,7 @@ import pandas as pd
 from bokeh.layouts import column, row
 from bokeh.models import Select, TextInput, MultiSelect, ColumnDataSource, HoverTool, Span, Spacer
 from bokeh.plotting import figure, curdoc
+from bokeh.models import Button, Div
 
 # Load the data
 file_path = 'cleaned_data.csv'
@@ -27,7 +28,8 @@ min_games_input = TextInput(title="Minimum Games Threshold:", value="50")
 # Create plot-specific widgets for the ally plot
 ally_role_select = Select(title="Select Ally Role:", value="JUNGLE", options=roles)
 ally_min_games_input = TextInput(title="Minimum Games Threshold for Allies:", value="50")
-ally_champion_select = MultiSelect(title="Select Ally Champions:", value=[], options=[])
+ally_champion_select = Select(title="Select an Ally to Compare:", value="", options=[])
+selected_allies = []  # Keep track of selected allies
 
 # -------------------------------------------------------------------------------- #
 # Supporting Functions                                                             #
@@ -69,13 +71,46 @@ def update_enemy_champion_options(attr, old, new):
     # Trigger the plot update after updating the dropdown
     update_winrate_plot_with_filters(attr, old, new)
 
+def add_ally_to_selection(attr, old, new):
+    """Add the selected ally to the list of selected allies."""
+    global selected_allies
+    if new and new not in selected_allies and len(selected_allies) < 3:
+        selected_allies.append(new)  # Add to selected allies
+        update_ally_synergy_plot(None, None, None)  # Update the plot
+        update_ally_dropdown_options()  # Refresh the dropdown options
+        ally_champion_select.value = ""  # Reset dropdown after selection
 
-def update_ally_champion_options(attr, old, new):
-    """Update the MultiSelect options with all valid allies."""
-    ally_columns = ['ally_1', 'ally_2', 'ally_3', 'ally_4', 'ally_5']
-    ally_champions = pd.concat([df[col] for col in ally_columns]).dropna().unique()
-    ally_champion_select.options = sorted(ally_champions.tolist())
-    ally_champion_select.value = []  # Clear selection when options update
+def update_ally_dropdown_options():
+    """Update the dropdown to exclude already-selected allies."""
+    ally_role = ally_role_select.value  # Get the selected ally role
+    role_column_map = {
+        "TOP": "ally_1",
+        "JUNGLE": "ally_2",
+        "MID": "ally_3",
+        "ADC": "ally_4",
+        "SUP": "ally_5",
+    }
+    ally_column = role_column_map.get(ally_role)
+    
+    # Ensure the ally column exists
+    if not ally_column:
+        ally_champion_select.options = []
+        return
+
+    # Get all allies in the selected role
+    allies_in_role = df[ally_column].dropna().unique()
+
+    # Exclude already-selected allies
+    remaining_allies = [ally for ally in allies_in_role if ally not in selected_allies]
+    ally_champion_select.options = sorted(remaining_allies)
+
+def remove_ally_from_selection(ally):
+    """Remove an ally from the selected list and update the plot."""
+    global selected_allies
+    if ally in selected_allies:
+        selected_allies.remove(ally)
+        update_ally_dropdown_options()  # Refresh dropdown options
+        update_ally_synergy_plot(None, None, None)  # Update the plot
 
 
 # -------------------------------------------------------------------------------- #
@@ -197,7 +232,8 @@ ally_synergy_source = ColumnDataSource(data=dict(ally_champion=[], win_rate_perc
 
 def calculate_ally_synergies(champion, role, selected_allies, ally_role):
     """Calculate ally synergies considering the ally role."""
-    if not selected_allies:  # No allies selected
+    # If no allies are selected, return an empty DataFrame
+    if not selected_allies:
         return pd.DataFrame(columns=['ally_champion', 'win_rate', 'n_games', 'win_rate_percent'])
 
     # Filter data for the selected champion and role
@@ -235,6 +271,7 @@ def calculate_ally_synergies(champion, role, selected_allies, ally_role):
 
     return win_rates
 
+
 def update_ally_synergy_plot_on_role(attr, old, new):
     """Update the ally synergy plot based on the selected ally role."""
     ally_role = ally_role_select.value  # Get the selected ally role
@@ -269,7 +306,7 @@ def update_ally_synergy_plot_on_role(attr, old, new):
     # Filter allies in the selected role
     allies_in_role = df[ally_column].dropna().unique().tolist()
 
-    # Calculate synergies for all allies in the selected role
+    # Use all allies in the selected role for the initial display
     ally_data = calculate_ally_synergies(
         champion=champion_select.value,
         role=user_role,
@@ -277,38 +314,43 @@ def update_ally_synergy_plot_on_role(attr, old, new):
         ally_role=ally_role
     )
 
-    # Sort allies by win rate in descending order
-    ally_data = ally_data.sort_values(by='win_rate_percent', ascending=False)
-
     # Calculate overall winrate for the selected champion
     overall_winrate = calculate_overall_win_rate(champion_select.value)
 
-    # Assign colors based on comparison with overall winrate
+    # Sort allies by win rate in descending order
+    ally_data = ally_data.sort_values(by='win_rate_percent', ascending=False)
+
+    # Assign colors to all allies
     ally_data['color'] = ally_data['win_rate_percent'].apply(
         lambda x: '#2b93b6' if x >= overall_winrate else '#e54635'
     )
 
+    # Initialize the plot with all allies above the overall winrate
+    displayed_allies = ally_data[ally_data['win_rate_percent'] >= overall_winrate]
+
+    # If no allies meet the criteria, show the top 5 allies
+    if displayed_allies.empty:
+        displayed_allies = ally_data.head(5)
+
     # Update the plot
-    ally_synergy_source.data = ally_data.to_dict(orient='list')
-    ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
+    ally_synergy_source.data = displayed_allies.to_dict(orient='list')
+    ally_synergy_plot.x_range.factors = list(displayed_allies['ally_champion'])
     ally_synergy_plot.title.text = f"Ally Synergies for {champion_select.value} ({user_role}) with {ally_role} Allies"
 
     # Update the dashed line for the overall winrate
     overall_winrate_line.location = overall_winrate
 
-
-
-
 def update_ally_synergy_plot(attr, old, new):
-    """Update the ally synergy plot based on selected allies and ally role."""
-    selected_allies = ally_champion_select.value
+    """Update the ally synergy plot based on selected allies."""
+    global selected_allies
     ally_role = ally_role_select.value  # Get selected ally role
     ally_data = calculate_ally_synergies(champion_select.value, role_select.value, selected_allies, ally_role)
 
     # Update the plot with new data
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
-    ally_synergy_plot.title.text = f"Ally Synergies for {champion_select.value} ({role_select.value}) with {ally_role} Allies"
+    ally_synergy_plot.title.text = f"Ally Synergies for {champion_select.value} ({role_select.value}) with Selected Allies"
+
 
 
 def create_ally_synergy_plot():
@@ -400,10 +442,21 @@ ally_synergy_section = column(
     ally_synergy_plot  # Only the figure (not the tuple)
 )
 
+# Create buttons and a display for selected allies
+ally_buttons = []
+for ally in selected_allies:
+    button = Button(label=f"Remove {ally}", button_type="danger")
+    button.on_click(lambda ally=ally: remove_ally_from_selection(ally))
+    ally_buttons.append(button)
+
+selected_allies_display = column(*ally_buttons)
+
 # Create the full 2x2 grid layout
+
 layout = column(
-    row(winrate_section, spacer, ally_synergy_section),  # Top row
-    row(dummy_plot_1, dummy_plot_2)  # Bottom row (empty for now)
+    row(winrate_section, spacer, ally_synergy_section),
+    row(dummy_plot_1, dummy_plot_2),
+    selected_allies_display
 )
 
 # Attach callbacks
@@ -415,15 +468,15 @@ enemy_champion_select.on_change('value', update_winrate_plot_with_filters)
 
 ally_role_select.on_change('value', update_ally_synergy_plot_on_role)
 ally_min_games_input.on_change('value', update_ally_synergy_plot)
-ally_champion_select.on_change('value', update_ally_synergy_plot)
+ally_champion_select.on_change('value', add_ally_to_selection)
 
-
-
+# Initial update
 # Initial update
 update_enemy_champion_options(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
-update_ally_champion_options(None, None, None)  # Ally champion options
+update_ally_dropdown_options()  # Ensure dropdown options are initialized
 update_ally_synergy_plot_on_role(None, None, None)  # Initialize the ally plot
+
 
 # Add the layout to curdoc
 curdoc().clear()  # Clear any previous layouts
