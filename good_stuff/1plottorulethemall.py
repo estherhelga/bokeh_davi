@@ -6,7 +6,8 @@ from bokeh.models import Button, Div
 import numpy as np
 from sklearn.neighbors import KernelDensity
 from bokeh.models import CustomJSTickFormatter, Label
-from bokeh.palettes import Category20c
+from bokeh.palettes import linear_palette
+from bokeh.palettes import Blues256
 
 # Load the data
 file_path = 'cleaned_data.csv'
@@ -49,8 +50,6 @@ item_data_filtered['win_rate'] = (
 item_data_filtered = item_data_filtered[item_data_filtered['frequency_percentage'] >= 3]
 
 categories = list(item_data_filtered['Category'].unique())
-
-
 
 # -------------------------------------------------------------------------------- #
 # Supporting Functions                                                             #
@@ -558,10 +557,19 @@ def create_sina_plot():
 # Population pyramid                                                               #
 # -------------------------------------------------------------------------------- #
 
+#widget
+sort_criterion_select = Select(title="Sort Population Pyramid By:", value="Frequency", options=["Frequency", "Winrate"])
+
+
 def create_population_pyramid():
     """Create the Population Pyramid plot for item frequency and win rate."""
+    # Define the single blue and gray colors
+    selected_blue_color = "#2B93B6"  # Blue for the selected side
+    non_selected_gray_color = "#7F7F7F"  # Gray for the non-selected side
+
     champion_name = champion_select.value  # Use the globally selected champion
     role = role_select.value  # Use the globally selected role
+    sort_by = sort_criterion_select.value  # Use the sorting criterion specific to the pyramid
 
     # Filter data for the selected champion and role
     pyramid_data = item_data_filtered[(item_data_filtered['champion'] == champion_name) & 
@@ -578,18 +586,33 @@ def create_population_pyramid():
 
     # Merge and ensure alignment
     merged_data = pd.merge(freq, winrate, on='item_name', suffixes=('_freq', '_winrate'))
-    merged_data.sort_values('frequency_percentage', ascending=False, inplace=True)
+
+    # Sort the data based on the selected criterion
+    if sort_by == "Frequency":
+        merged_data.sort_values('frequency_percentage', ascending=False, inplace=True)
+    elif sort_by == "Winrate":
+        merged_data.sort_values('win_rate', ascending=False, inplace=True)
+
+    # Reverse the y_range to have the highest values at the top
+    sorted_items = merged_data['item_name'][::-1]
+
+    # Assign fixed colors
+    num_items = len(merged_data)
+    if sort_by == "Frequency":
+        frequency_colors = [selected_blue_color] * num_items
+        winrate_colors = [non_selected_gray_color] * num_items
+    else:
+        frequency_colors = [non_selected_gray_color] * num_items
+        winrate_colors = [selected_blue_color] * num_items
 
     # Create the Bokeh figure
     bin_width = 0.8
-    color_frequency = Category20c[20][0]  # First color in the palette
-    color_winrate = Category20c[20][1]   # Second color in the palette
 
     p = figure(
-        title=f"Population Pyramid for {champion_name}: Frequency % vs Win Rate %",
+        title=f"Population Pyramid for {champion_name}: {sort_by} %",
         height=400, width=800,
         x_range=(-100, 100),  # Fixed range from -100 to 100
-        y_range=list(merged_data['item_name']),
+        y_range=list(sorted_items),  # Highest values appear at the top
         y_axis_label="Items"
     )
 
@@ -598,7 +621,7 @@ def create_population_pyramid():
         y=merged_data['item_name'],
         right=merged_data['frequency_percentage'],
         height=bin_width,
-        color=color_frequency,
+        color=frequency_colors,
         legend_label="Frequency %"
     )
 
@@ -607,7 +630,7 @@ def create_population_pyramid():
         y=merged_data['item_name'],
         right=-merged_data['win_rate'],  # Negate for left side
         height=bin_width,
-        color=color_winrate,
+        color=winrate_colors,
         legend_label="Win Rate %"
     )
 
@@ -621,18 +644,20 @@ def create_population_pyramid():
     p.yaxis.axis_label_text_font_size = "14pt"
     p.yaxis.axis_label_standoff = 10
 
-    # # Add labels for sides
-    p.add_layout(Label(x=-20, y=len(merged_data) + 1, text="Win Rate %", text_color=color_winrate))
-    p.add_layout(Label(x=20, y=len(merged_data) + 1, text="Frequency %", text_color=color_frequency))
+    # Add labels for sides
+    p.add_layout(Label(x=-20, y=len(merged_data) + 1, text="Win Rate %", text_color=selected_blue_color))
+    p.add_layout(Label(x=20, y=len(merged_data) + 1, text="Frequency %", text_color=selected_blue_color))
 
     p.legend.orientation = "horizontal"
     p.legend.location = "top_center"
 
-    #Hide the legend 
-    p.legend.visible = False
-
     return p
 
+
+
+
+def update_population_pyramid(attr, old, new):
+    layout.children[1].children[1].children[1] = create_population_pyramid()  # Update only the pyramid plot
 
 # -------------------------------------------------------------------------------- #
 # Global Settings function                                                         #
@@ -679,9 +704,10 @@ selected_allies_display = column(*ally_buttons)
 
 # Create the full 2x2 grid layout
 
+# Update the full layout
 layout = column(
     row(winrate_section, ally_synergy_section),  # Top row
-    row(create_sina_plot(), create_population_pyramid())  # Bottom row
+    row(create_sina_plot(), column(sort_criterion_select, create_population_pyramid()))
 )
 
 
@@ -691,17 +717,16 @@ role_select.on_change('value', update_global_settings)
 min_games_input.on_change('value', update_winrate_plot_with_filters)
 enemy_role_select.on_change('value', update_enemy_champion_options)
 enemy_champion_select.on_change('value', update_winrate_plot_with_filters)
-
-def update_population_pyramid(attr, old, new):
-    layout.children[1].children[1] = create_population_pyramid()  # Replace the pyramid in the layout
-
 champion_select.on_change('value', update_population_pyramid)
 role_select.on_change('value', update_population_pyramid)
+sort_criterion_select.on_change('value', update_population_pyramid)
 
 
 ally_role_select.on_change('value', update_ally_synergy_plot_on_role)
 ally_min_games_input.on_change('value', update_ally_synergy_plot)
 ally_champion_select.on_change('value', update_ally_synergy_plot)
+sort_criterion_select.on_change("value", update_population_pyramid)
+
 
 # Initial update
 update_enemy_champion_options(None, None, None)
