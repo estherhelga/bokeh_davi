@@ -129,7 +129,6 @@ min_games_input = TextInput(title="Minimum Games Threshold:", value="50")
 # Ally-specific widgets
 ally_role_select = Select(title="Select Ally Role:", value="JUNGLE", options=roles)
 ally_min_games_input = TextInput(title="Minimum Games Threshold for Allies:", value="50")
-ally_champion_select = Select(title="Select an Ally to Compare:", value="", options=[])
 selected_allies = []  # Track selected allies dynamically
 selected_allies_display = column()  # Dynamic ally display
 
@@ -280,7 +279,7 @@ def calculate_ally_synergies(champion: str, role: str, selected_allies: list, al
         pd.DataFrame: DataFrame containing ally synergy statistics.
     """
     if not selected_allies:
-        return pd.DataFrame(columns=['ally_champion', 'win_rate', 'n_games', 'win_rate_percent'])
+        return pd.DataFrame(columns=['ally_champion', 'win_rate', 'n_games', 'win_rate_percent', 'texture'])
 
     filtered_df = df[(df['champion'] == champion) & (df['team_position'] == role)]
 
@@ -309,6 +308,7 @@ def calculate_ally_synergies(champion: str, role: str, selected_allies: list, al
         .rename(columns={'mean': 'win_rate', 'size': 'n_games'})
     )
     win_rates['win_rate_percent'] = (win_rates['win_rate'] * 100).round(2)
+    win_rates['texture'] = ''  # Default no texture
 
     # Filter by minimum games threshold
     min_games = validate_numeric_input(ally_min_games_input.value, default=10)
@@ -326,7 +326,13 @@ def update_ally_synergy_plot(attr, old, new):
     Update the ally synergy plot based on selected allies and roles.
     """
     global selected_allies
+    # Fallback if no role is selected
     ally_role = ally_role_select.value
+    if not ally_role or ally_role not in roles:
+        ally_synergy_source.data = dict(ally_champion=[], win_rate_percent=[], n_games=[], color=[])
+        ally_synergy_plot.x_range.factors = []
+        ally_synergy_plot.title.text = "No role selected for ally synergies."
+        return
 
     ally_data = calculate_ally_synergies(
     champion=champion_select.value,
@@ -345,18 +351,18 @@ def update_ally_synergy_plot(attr, old, new):
     # Filter allies based on win rates above the overall win rate
     ally_data = ally_data[ally_data['win_rate_percent'] > overall_winrate]
 
-    # Sort allies by win rate in descending order
-    ally_data = ally_data.sort_values(by='win_rate_percent', ascending=False)
-
-    # Ensure selected allies are always displayed (even if win rate is below overall winrate)
+    # Ensure selected allies are always displayed
     for ally in selected_allies:
         if ally not in ally_data['ally_champion'].values:
             ally_data = pd.concat([ally_data, pd.DataFrame({
                 'ally_champion': [ally],
-                'win_rate_percent': [0],
+                'win_rate_percent': [0],  # Default win rate if no data available
                 'n_games': [0],
                 'color': ['#e54635']
             })], ignore_index=True)
+
+    # Sort allies by win rate in descending order
+    ally_data = ally_data.sort_values(by='win_rate_percent', ascending=False)
 
     # Assign colors based on win rate
     ally_data['color'] = ally_data['win_rate_percent'].apply(
@@ -440,7 +446,11 @@ def create_ally_synergy_plot():
         width=0.5,
         source=ally_synergy_source,
         line_color="white",
-        fill_color='color'
+        fill_color='color',
+        hatch_pattern='texture',  # Add hatch pattern from texture column
+        hatch_color="white",
+        hatch_alpha=0.5,
+        hatch_weight=2
     )
 
     hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games")])
@@ -677,7 +687,6 @@ winrate_section = column(
 # Layout for the Ally Synergies plot with widgets
 ally_synergy_section = column(
     row(ally_role_select, ally_min_games_input),  # Ally Role and Min Games widgets
-    ally_champion_select,  # Dropdown for Ally Champion selection
     ally_synergy_plot  # Synergies plot
 )
 
@@ -720,16 +729,11 @@ def update_ally_dropdown_options():
     }
     ally_column = role_column_map.get(ally_role)
 
-    if not ally_column:
-        ally_champion_select.options = []
-        return
-
     # Get allies in the selected role
     allies_in_role = df[ally_column].dropna().unique()
 
     # Exclude already-selected allies
     remaining_allies = [ally for ally in allies_in_role if ally not in selected_allies]
-    ally_champion_select.options = sorted(remaining_allies)
 
 # Initial update of selected allies display
 update_selected_allies_display()
@@ -771,7 +775,6 @@ enemy_champion_select.on_change("value", update_winrate_plot_with_filters)
 # Ally-specific callbacks
 ally_role_select.on_change("value", update_ally_synergy_plot_on_role)
 ally_min_games_input.on_change("value", update_ally_synergy_plot)
-ally_champion_select.on_change("value", update_ally_synergy_plot)
 
 # Attach sort criterion callback for the Population Pyramid
 sort_criterion_select.on_change("value", update_population_pyramid)
