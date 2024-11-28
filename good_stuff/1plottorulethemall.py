@@ -651,6 +651,9 @@ def create_population_pyramid():
     p.legend.orientation = "horizontal"
     p.legend.location = "top_center"
 
+    # Hide legend
+    p.legend.visible = False
+
     return p
 
 
