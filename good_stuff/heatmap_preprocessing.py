@@ -42,6 +42,9 @@ def normalize_group(group):
 # Apply normalization for each champion group
 final_data = aggregated_data.groupby("champion").apply(normalize_group).reset_index(drop=True)
 
+# Reverse normalization for deaths
+final_data["normalized_deaths"] = 1 - final_data["normalized_deaths"]
+
 # Step 4: Save to CSV
 final_data.to_csv("heatmap_data.csv", index=False)
 print("Processed data saved to heatmap_data.csv")
