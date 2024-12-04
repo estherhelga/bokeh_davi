@@ -1,12 +1,14 @@
 import pandas as pd
 from bokeh.layouts import column, row
-from bokeh.models import Select, TextInput, MultiSelect, ColumnDataSource, HoverTool, Span, Spacer, Button, Div
-from bokeh.plotting import figure, curdoc
+from bokeh.models import Select, TextInput, MultiSelect, ColumnDataSource, HoverTool, Span, Spacer, Button, Div, LinearColorMapper, ColorBar
+from bokeh.plotting import figure, curdoc, show
 from bokeh.models import CustomJSTickFormatter, Label
 from bokeh.palettes import linear_palette
 from bokeh.palettes import Blues256
 import numpy as np
 from sklearn.neighbors import KernelDensity
+from bokeh.palettes import RdYlGn11
+
 
 # -------------------------------------------------------------------------------- #
 # Data Loading and Initialization                                                  #
@@ -35,22 +37,86 @@ roles = ['TOP', 'JUNGLE', 'MID', 'ADC', 'SUP']
 try:
     item_data = pd.read_csv('final_item_champion_stats.csv')
     item_data_filtered = item_data[item_data['Category'].isin(['Full Item'])].copy()
+
+    # Add frequency percentage column
+    item_data_filtered['frequency_percentage'] = (
+        item_data_filtered['occurrence_count'] / item_data_filtered['total_games_champion'] * 100
+    )
+
+    # Calculate win rate as a percentage
+    item_data_filtered['win_rate'] = (
+        item_data_filtered['win_count'] / item_data_filtered['occurrence_count'] * 100
+    )
+    # Filter items with a frequency percentage of 3 or higher
+    item_data_filtered = item_data_filtered[item_data_filtered['frequency_percentage'] >= 3]
+
+
 except FileNotFoundError:
     raise RuntimeError("File not found: final_item_champion_stats.csv. Ensure the file exists.")
 except pd.errors.ParserError as e:
     raise RuntimeError(f"Error parsing CSV file: {e}")
 
-# Add frequency percentage and win rate columns for SinaPlot
-item_data_filtered['frequency_percentage'] = (
-    item_data_filtered['occurrence_count'] / item_data_filtered['total_games_champion'] * 100
-)
-item_data_filtered['win_rate'] = (
-    item_data_filtered['win_count'] / item_data_filtered['occurrence_count'] * 100
-)
-item_data_filtered = item_data_filtered[item_data_filtered['frequency_percentage'] >= 3]
+# Load heatmap data with error handling
+try:
+    heatmap_file_path = 'heatmap_data.csv'
+    heatmap_data = pd.read_csv(heatmap_file_path)
 
-# Categories for SinaPlot
-categories = list(item_data_filtered['Category'].unique())
+    # Validate necessary columns
+    required_columns = {'champion', 'lane_opponent', 'n_games'}
+    if not required_columns.issubset(heatmap_data.columns):
+        raise ValueError(f"Missing required columns in heatmap data. Expected: {required_columns}")
+
+    # Additional metrics columns (ensure normalization-ready data)
+    metrics = [
+        "winrate",  # Add winrate as the first metric
+        "normalized_lane_minions_first_10_minutes",
+        "normalized_max_cs_advantage_on_lane_opponent",
+        "normalized_max_level_lead_lane_opponent",
+        "normalized_turret_plates_taken",
+        "normalized_solo_kills",
+        "normalized_deaths",
+    ]
+
+    # Define color mappers for each metric
+    color_mappers = {
+        "winrate": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
+        "normalized_lane_minions_first_10_minutes": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
+        "normalized_max_cs_advantage_on_lane_opponent": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
+        "normalized_max_level_lead_lane_opponent": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
+        "normalized_turret_plates_taken": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
+        "normalized_solo_kills": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
+        "normalized_deaths": LinearColorMapper(palette=RdYlGn11, low=1, high=0),  # Non-reversed colormap for Deaths
+    }
+
+
+    raw_metrics = [
+        "winrate",
+        "lane_minions_first_10_minutes",
+        "max_cs_advantage_on_lane_opponent",
+        "max_level_lead_lane_opponent",
+        "turret_plates_taken",
+        "solo_kills",
+        "deaths",
+    ]
+
+    metric_labels = [
+        "Winrate",  # Label for winrate
+        "CS First 10m",
+        "CS Advantage",
+        "Level Lead",
+        "Turret Plates",
+        "Solo Kills",
+        "Deaths",
+    ]
+
+    # Map metric labels to metrics
+    metric_map = dict(zip(metric_labels, metrics))
+    raw_metric_map = dict(zip(metric_labels, raw_metrics))
+except FileNotFoundError:
+    raise RuntimeError(f"File not found: {heatmap_file_path}. Ensure the file exists.")
+except pd.errors.ParserError as e:
+    raise RuntimeError(f"Error parsing CSV file {heatmap_file_path}: {e}")
+
 
 # -------------------------------------------------------------------------------- #
 # Supporting Functions                                                             #
@@ -132,6 +198,12 @@ ally_min_games_input = TextInput(title="Minimum Games Threshold for Allies:", va
 selected_allies = []  # Track selected allies dynamically
 selected_allies_display = column()  # Dynamic ally display
 
+# Sort Selector Widget for Heatmap
+sort_select = Select(
+    title="Sort By Metric:",
+    value="Winrate",
+    options=metric_labels
+)
 
 # -------------------------------------------------------------------------------- #
 # Creation of the Win Rate Against Enemies Plot                                    #
@@ -478,94 +550,125 @@ ally_synergy_plot, overall_winrate_line = create_ally_synergy_plot()
 
 
 # -------------------------------------------------------------------------------- #
-# Sina Plot                                                                        #
+# Heatmap Plot                                                                     #
 # -------------------------------------------------------------------------------- #
 
-def create_sina_plot():
-    """
-    Create the Sina Plot for item frequency distribution.
-    Returns:
-        bokeh.plotting.figure: Configured Sina Plot figure.
-    """
-    source = ColumnDataSource(data=dict(x=[], y=[], item_name=[], frequency_percentage=[], win_rate=[], size=[]))
+# Prepare Heatmap Data
+default_champion = heatmap_data['champion'].unique()[0]
+filtered_data = heatmap_data[heatmap_data['champion'] == default_champion]
 
-    p = figure(
-        height=400,
-        width=600,
-        x_range=categories,
-        y_range=(0, 100),
-        x_axis_label="Item Category",
-        y_axis_label="Frequency (%)",
-        title="Item Frequency Distribution by Category",
-    )
+# Create the initial ColumnDataSource for the heatmap
+source = ColumnDataSource(data={
+    "lane_opponent": [],
+    "metric": [],
+    "value": [],
+    "raw_value": [],
+    "n_games": [],
+})
 
-    def offset(category, data, scale=1):
-        """Add jitter for the x-axis based on the category."""
-        return list(zip([category] * len(data), scale * data))
+# Create Heatmap Figure
+heatmap_plot = figure(
+    title=f"Performance Metrics Against Opponents ({default_champion})",
+    x_range=metric_labels,
+    y_range=list(filtered_data['lane_opponent'].unique()),
+    x_axis_label="Metrics",
+    y_axis_label="Opponents",
+    toolbar_location=None,
+    tools=""
+)
 
-    def update_sina_plot(attr, old, new):
-        """
-        Update the Sina Plot based on the selected champion and role.
-        """
-        selected_champion = champion_select.value
-        selected_role = role_select.value
-        champion_data = item_data_filtered[
-            (item_data_filtered['champion'] == selected_champion) &
-            (item_data_filtered['role'] == selected_role)
-        ]
+# Add rectangles to the heatmap
+heatmap_plot.rect(
+    x="metric",
+    y="lane_opponent",
+    width=1,
+    height=1,
+    source=source,
+    fill_color={"field": "value", "transform": color_mappers["winrate"]},
+    line_color=None
+)
 
-        x, y, item_name, frequency_percentage, win_rate, size = [], [], [], [], [], []
+# Add a color bar
+color_bar = ColorBar(
+    color_mapper=color_mappers["winrate"],
+    label_standoff=12,
+    location=(0, 0),
+    orientation="vertical"
+)
+heatmap_plot.add_layout(color_bar, "right")
 
-        np.random.seed(42)  # For consistent jittering
+# Add HoverTool
+hover = HoverTool(
+    tooltips=[
+        ("Metric", "@metric"),
+        ("Opponent", "@lane_opponent"),
+        ("Normalized Value", "@value{0.2f}"),
+        ("Mean Value", "@raw_value{0.2f}"),
+        ("Number of Games", "@n_games"),
+    ]
+)
+heatmap_plot.add_tools(hover)
 
-        for category in categories:
-            category_data = champion_data[champion_data['Category'] == category]
-            freq = category_data['frequency_percentage'].values
-            win = category_data['win_rate'].values
-            items = category_data['item_name'].values
+# Update Function for Heatmap
+def update_heatmap(attr, old, new):
+    selected_champion = champion_select.value
+    selected_sort_metric = metric_map[sort_select.value]
+    min_games = int(min_games_input.value) if min_games_input.value.isdigit() else 50
 
-            if len(freq) > 0:
-                jitter = np.random.uniform(-0.2, 0.2, len(freq))  # Random jitter for separation
-                x.extend(offset(category, jitter))
-                y.extend(freq)
-                item_name.extend(items)
-                frequency_percentage.extend(freq)
-                win_rate.extend(win)
-                size.extend([5 + (w / 10) for w in win])  # Adjust size dynamically based on win rate
+    # Filter data for the selected champion and minimum games
+    updated_data = heatmap_data[
+        (heatmap_data['champion'] == selected_champion) & 
+        (heatmap_data['n_games'] >= min_games)
+    ]
 
-        source.data = dict(
-            x=x,
-            y=y,
-            item_name=item_name,
-            frequency_percentage=frequency_percentage,
-            win_rate=win_rate,
-            size=size,
-        )
+    # Sort the data by the selected metric
+    updated_data = updated_data.sort_values(by=selected_sort_metric, ascending=False)
 
-    scatter = p.scatter(
-        x='x',
-        y='y',
-        size='size',
-        source=source,
-        color="black",
-    )
+    # Prepare new data for the heatmap
+    new_source_data = {
+        "lane_opponent": [],
+        "metric": [],
+        "value": [],
+        "raw_value": [],
+        "n_games": [],
+    }
 
-    hover = HoverTool(
-        renderers=[scatter],
-        tooltips=[
-            ("Item Name", "@item_name"),
-            ("Frequency (%)", "@frequency_percentage{0.2f}"),
-            ("Win Rate (%)", "@win_rate{0.2f}")
-        ],
-    )
-    p.add_tools(hover)
+    for metric, label in zip(metrics, metric_labels):
+        raw_metric = raw_metric_map[label]
+        if metric == "winrate":
+            for _, row in updated_data.iterrows():
+                new_source_data["lane_opponent"].append(row["lane_opponent"])
+                new_source_data["metric"].append(label)
+                new_source_data["value"].append(row["winrate"])
+                new_source_data["raw_value"].append(row["winrate"])
+                new_source_data["n_games"].append(row["n_games"])
+        else:
+            metric_min = updated_data[metric].min()
+            metric_max = updated_data[metric].max()
 
-    # Attach callbacks
-    champion_select.on_change("value", update_sina_plot)
-    role_select.on_change("value", update_sina_plot)
+            # Avoid divide-by-zero errors
+            if metric_max > metric_min:
+                updated_data[metric] = (
+                    (updated_data[metric] - metric_min) / (metric_max - metric_min)
+                )
+            else:
+                updated_data[metric] = 0.5
 
-    update_sina_plot(None, None, None)  # Initial update
-    return p
+            for _, row in updated_data.iterrows():
+                new_source_data["lane_opponent"].append(row["lane_opponent"])
+                new_source_data["metric"].append(label)
+                new_source_data["value"].append(row[metric])
+                new_source_data["raw_value"].append(row[raw_metric])
+                new_source_data["n_games"].append(row["n_games"])
+
+    source.data = new_source_data
+    heatmap_plot.y_range.factors = list(updated_data['lane_opponent'].unique())
+    heatmap_plot.title.text = f"Performance Metrics Against Opponents ({selected_champion})"
+    color_bar.color_mapper = color_mappers[selected_sort_metric]
+
+# Initial Update for Heatmap
+update_heatmap(None, None, None)
+
 
 # -------------------------------------------------------------------------------- #
 # Population Pyramid                                                               #
@@ -738,15 +841,15 @@ def update_ally_dropdown_options():
 # Initial update of selected allies display
 update_selected_allies_display()
 
-# Create the Sina Plot and Population Pyramid
-sina_plot = create_sina_plot()
+# Create the Population Pyramid
 pyramid_plot = create_population_pyramid()
 
 # Define the advanced analysis section
 advanced_analysis_section = row(
     column(sort_criterion_select, pyramid_plot),  # Population Pyramid
-    sina_plot  # Sina Plot
+    column(sort_select, heatmap_plot)  # Heatmap and its sorting widget
 )
+
 
 # Combine all sections into the final layout
 layout = column(
@@ -762,10 +865,12 @@ layout = column(
 champion_select.on_change("value", update_winrate_plot_with_filters)
 champion_select.on_change("value", update_ally_synergy_plot_on_role)
 champion_select.on_change("value", update_population_pyramid)
+champion_select.on_change("value", update_heatmap)
 
 role_select.on_change("value", update_winrate_plot_with_filters)
 role_select.on_change("value", update_ally_synergy_plot_on_role)
 role_select.on_change("value", update_population_pyramid)
+role_select.on_change("value", update_heatmap)
 
 # Enemy-specific callbacks
 min_games_input.on_change("value", update_winrate_plot_with_filters)
