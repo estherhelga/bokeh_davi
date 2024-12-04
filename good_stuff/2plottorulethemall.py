@@ -87,7 +87,7 @@ try:
         "normalized_max_level_lead_lane_opponent": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
         "normalized_turret_plates_taken": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
         "normalized_solo_kills": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
-        "normalized_deaths": LinearColorMapper(palette=RdYlGn11, low=1, high=0),  # Non-reversed colormap for Deaths
+        "normalized_deaths": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),  # Non-reversed colormap for Deaths
     }
 
 
