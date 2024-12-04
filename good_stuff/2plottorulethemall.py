@@ -199,7 +199,7 @@ ally_role_select = Select(title="Ally Role:", value="JUNGLE", options=roles, wid
 ally_min_games_input = TextInput(title="Minimum Games:", value="50", width=100)
 
 # Population Pyramid
-sort_criterion_select = Select(title="Sort Population Pyramid By:", value="Frequency", options=["Frequency", "Winrate"], width=100)
+sort_criterion_select = Select(title="Sort By:", value="Frequency", options=["Frequency", "Winrate"], width=100)
 
 # Sort Selector Widget for Heatmap
 sort_select = Select(title="Sort By:", value="Winrate", options=metric_labels, width=100)
@@ -657,7 +657,7 @@ def update_heatmap(attr, old, new):
 
     # Dynamically update the y_range of the heatmap
     heatmap_plot.y_range.factors = list(reversed(updated_data['lane_opponent'].unique()))
-    heatmap_plot.title.text = f"Performance Metrics Against Lane Opponents as {selected_champion}"
+    heatmap_plot.title.text = f"Performance Metrics Against {role_select.value} Enemies as {selected_champion} ({role_select.value})"
 
     # Update the heatmap's fill_color dynamically
     heatmap_renderer.glyph.fill_color = {"field": "value", "transform": color_mappers[selected_sort_metric]}
@@ -760,9 +760,9 @@ def update_population_pyramid(attr, old, new):
     """
     # Create a new Population Pyramid figure
     new_pyramid_plot = create_population_pyramid()
-    
+
     # Update the layout's children to replace the old pyramid plot
-    advanced_analysis_section.children[0].children[1] = new_pyramid_plot
+    advanced_analysis_section.children[1].children[0] = column(sort_criterion_select, new_pyramid_plot)
 
 pyramid_plot = create_population_pyramid() 
 
@@ -776,7 +776,7 @@ pyramid_plot = create_population_pyramid()
 # # -------------------------------------------------------------------------------- #
 
 # Spacer for visual alignment
-spacer = Spacer(width=300, height=100)
+spacer = Spacer(width=200, height=100)
 
 # Layout for the Win Rate plot with widgets
 winrate_section = column(
@@ -797,15 +797,16 @@ ally_synergy_section = column(
 pyramid_plot = create_population_pyramid()
 
 # Define the advanced analysis section
-advanced_analysis_section = row(
-    column(sort_criterion_select, pyramid_plot),  # Population Pyramid
-    column(sort_select, heatmap_plot)  # Heatmap and its sorting widget
+advanced_analysis_section = column(
+    row(column(sort_select, heatmap_plot)),
+    row(column(sort_criterion_select, pyramid_plot))  # Population Pyramid
+      # Heatmap and its sorting widget
 )
 
 
 # Combine all sections into the final layout
-layout = column(
-    row(winrate_section, ally_synergy_section),
+layout = row(
+    column(winrate_section, ally_synergy_section), spacer,
     advanced_analysis_section
 )
 
