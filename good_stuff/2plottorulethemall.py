@@ -1,6 +1,6 @@
 import pandas as pd
 from bokeh.layouts import column, row
-from bokeh.models import Select, TextInput, MultiSelect, ColumnDataSource, HoverTool, Span, Spacer, Button, Div, LinearColorMapper, ColorBar
+from bokeh.models import Select, TextInput, MultiSelect, ColumnDataSource, HoverTool, Span, Spacer, Button, Div, LinearColorMapper, ColorBar, Tooltip, Legend, LegendItem
 from bokeh.plotting import figure, curdoc, show
 from bokeh.models import CustomJSTickFormatter, Label
 from bokeh.palettes import linear_palette
@@ -8,6 +8,8 @@ from bokeh.palettes import Blues256
 import numpy as np
 from sklearn.neighbors import KernelDensity
 from bokeh.palettes import RdYlGn11
+from bokeh.models.dom import HTML
+from bokeh.models.glyphs import Rect, Line
 
 
 # -------------------------------------------------------------------------------- #
@@ -179,8 +181,8 @@ def update_enemy_champion_options(attr, old, new):
 # -------------------------------------------------------------------------------- #
 
 # Main widgets for user input
-champion_select = Select(title="Select Your Champion:", value=champions[0], options=champions)
-role_select = Select(title="Select Your Role:", value=roles[0], options=roles)
+champion_select = Select(title="Your Champion:", value=champions[0], options=champions, width=100)
+role_select = Select(title="Your Role:", value=roles[0], options=roles, width=100)
 
 # Div to display the overall win rate dynamically
 overall_avg_win_rate = calculate_overall_win_rate(champion_select.value)
@@ -188,22 +190,19 @@ overall_winrate_div = Div(text=f"Overall Win Rate: {overall_avg_win_rate:.2f}%",
 
 # Enemy-specific widgets
 enemy_roles = ["ANY", "TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]
-enemy_role_select = Select(title="Enemy Role:", value="ANY", options=enemy_roles)
-enemy_champion_select = Select(title="Compare Against Specific Enemy:", value="", options=[])
-min_games_input = TextInput(title="Minimum Games Threshold:", value="50")
+enemy_role_select = Select(title="Enemy Role:", value="ANY", options=enemy_roles, width=100)
+enemy_champion_select = Select(title="Specific Enemy:", value="", options=[], width=100)
+min_games_input = TextInput(title="Minimum Games:", value="50", width=100)
 
 # Ally-specific widgets
-ally_role_select = Select(title="Select Ally Role:", value="JUNGLE", options=roles)
-ally_min_games_input = TextInput(title="Minimum Games Threshold for Allies:", value="50")
-selected_allies = []  # Track selected allies dynamically
-selected_allies_display = column()  # Dynamic ally display
+ally_role_select = Select(title="Ally Role:", value="JUNGLE", options=roles, width=100)
+ally_min_games_input = TextInput(title="Minimum Games:", value="50", width=100)
+
+# Population Pyramid
+sort_criterion_select = Select(title="Sort Population Pyramid By:", value="Frequency", options=["Frequency", "Winrate"], width=100)
 
 # Sort Selector Widget for Heatmap
-sort_select = Select(
-    title="Sort By Metric:",
-    value="Winrate",
-    options=metric_labels
-)
+sort_select = Select(title="Sort By:", value="Winrate", options=metric_labels, width=100)
 
 # -------------------------------------------------------------------------------- #
 # Creation of the Win Rate Against Enemies Plot                                    #
@@ -218,9 +217,11 @@ def create_winrate_plot():
     Returns:
         tuple: Bokeh figure and average win rate line.
     """
-    p = figure(x_range=[], height=400, width = 900, title="Win Rate Against Enemies", toolbar_location=None, tools="")
+    # Create the figure
+    p = figure(x_range=[], height=400, width=900, title="Win Rate Against Enemies", toolbar_location=None, tools="")
 
-    p.vbar(
+    # Add the bars to the plot
+    bars = p.vbar(
         x='enemy_champion',
         top='win_rate_percent',
         width=0.5,
@@ -233,16 +234,37 @@ def create_winrate_plot():
         hatch_weight=2
     )
 
-    hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games")])
-    p.add_tools(hover)
+    # Add the average win rate line
+    avg_win_rate_line = Span(location=0, dimension='width', line_color='black', line_dash='dashed', line_width=2)
+    p.add_layout(avg_win_rate_line)
 
+    # Configure axes and appearance
     p.y_range.start = 0
     p.y_range.end = 100
     p.yaxis.axis_label = "Win Rate (%)"
     p.xaxis.major_label_orientation = 0.785
 
-    avg_win_rate_line = Span(location=0, dimension='width', line_color='black', line_dash='dashed', line_width=2)
-    p.add_layout(avg_win_rate_line)
+    # Add a hover tool for the bars
+    hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games"), ("Enemy", "@enemy_champion")])
+    p.add_tools(hover)
+
+    # Add invisible glyphs for legend entries
+    above_avg_glyph = p.vbar(x=[0], top=[1], fill_color='#2b93b6', line_color='white', width=0.1, visible=False)
+    below_avg_glyph = p.vbar(x=[0], top=[1], fill_color='#e54635', line_color='white', width=0.1, visible=False)
+    comparison_glyph = p.vbar(x=[0], top=[1], fill_color='#d3d3d3', line_color='white', hatch_pattern='/', hatch_color="white", width=0.1, visible=False)
+    avg_line_glyph = p.line(x=[0, 1], y=[0, 1], line_color="black", line_dash="dashed", line_width=2, visible=False)
+
+    # Add legend
+    legend_items = [
+        LegendItem(label="Above Avg. Win Rate", renderers=[above_avg_glyph]),
+        LegendItem(label="Below Avg. Win Rate", renderers=[below_avg_glyph]),
+        LegendItem(label="Specific Enemy", renderers=[comparison_glyph]),
+        LegendItem(label="Average Win Rate", renderers=[avg_line_glyph])
+    ]
+    legend = Legend(items=legend_items, location="top_right", label_text_font_size="10pt")
+    legend.background_fill_alpha = 0  # Make the legend background transparent
+    legend.border_line_alpha = 0  # Remove the legend border
+    p.add_layout(legend)
 
     return p, avg_win_rate_line
 
@@ -324,7 +346,7 @@ def update_winrate_plot_with_filters(attr, old, new):
     combined = combined.sort_values(by="win_rate", ascending=False)
     winrate_source.data = combined.to_dict(orient='list')
     winrate_plot.x_range.factors = list(combined['enemy_champion'])
-    winrate_plot.title.text = f"Win Rate Against Enemies as {champion_select.value} ({role_select.value})"
+    winrate_plot.title.text = f"Win Rate Against Enemies as {champion_select.value} ({role_select.value}) - Showing Best and Worst Matchups"
 
     avg_win_rate_line.location = overall_avg_win_rate
 
@@ -669,16 +691,14 @@ def update_heatmap(attr, old, new):
     source.data = new_source_data
 
     # Dynamically update the y_range of the heatmap
-    heatmap_plot.y_range.factors = list(updated_data['lane_opponent'].unique())
-    heatmap_plot.title.text = f"Performance Metrics Against Opponents ({selected_champion})"
+    heatmap_plot.y_range.factors = list(reversed(updated_data['lane_opponent'].unique()))
+    heatmap_plot.title.text = f"Performance Metrics Against Lane Opponents as {selected_champion}"
 
     # Update the heatmap's fill_color dynamically
     heatmap_renderer.glyph.fill_color = {"field": "value", "transform": color_mappers[selected_sort_metric]}
 
     # Update the color bar to reflect the selected metric's color mapping
     color_bar.color_mapper = color_mappers[selected_sort_metric]
-
-
 
 
 
@@ -780,10 +800,11 @@ def update_population_pyramid(attr, old, new):
     advanced_analysis_section.children[0].children[1] = new_pyramid_plot
 
 
+# -------------------------------------------------------------------------------- #
+# Tooltip Definitions                                                              #
+# -------------------------------------------------------------------------------- #
 
-# Initialize sort criterion selector and attach callbacks
-sort_criterion_select = Select(title="Sort Population Pyramid By:", value="Frequency", options=["Frequency", "Winrate"])
-sort_criterion_select.on_change("value", update_population_pyramid)
+
 
 # -------------------------------------------------------------------------------- #
 # Layout Assembly and Final Setup                                                  #
@@ -794,10 +815,11 @@ spacer = Spacer(width=300, height=100)
 
 # Layout for the Win Rate plot with widgets
 winrate_section = column(
-    row(champion_select, role_select, overall_winrate_div),  # Add the div here
+    row(champion_select, role_select),  # Add the div here
     row(enemy_role_select, min_games_input, enemy_champion_select),
     winrate_plot
 )
+
 
 # Layout for the Ally Synergies plot with widgets
 ally_synergy_section = column(
@@ -805,53 +827,6 @@ ally_synergy_section = column(
     ally_synergy_plot  # Synergies plot
 )
 
-# Buttons to dynamically display and remove selected allies
-def update_selected_allies_display():
-    """
-    Dynamically update the display of selected allies.
-    """
-    buttons = []
-    for ally in selected_allies:
-        button = Button(label=f"Remove {ally}", button_type="danger", width=150)
-        button.on_click(lambda ally=ally: remove_ally_from_selection(ally))
-        buttons.append(button)
-    selected_allies_display.children = buttons
-
-
-def remove_ally_from_selection(ally):
-    """
-    Remove an ally from the selected list and update the ally synergies plot.
-    """
-    global selected_allies
-    if ally in selected_allies:
-        selected_allies.remove(ally)
-        update_ally_dropdown_options()  # Refresh available allies in dropdown
-        update_ally_synergy_plot(None, None, None)  # Refresh the plot
-        update_selected_allies_display()  # Update ally display
-
-
-def update_ally_dropdown_options():
-    """
-    Update the Ally dropdown options to exclude already-selected allies.
-    """
-    ally_role = ally_role_select.value
-    role_column_map = {
-        "TOP": "ally_1",
-        "JUNGLE": "ally_2",
-        "MID": "ally_3",
-        "ADC": "ally_4",
-        "SUP": "ally_5",
-    }
-    ally_column = role_column_map.get(ally_role)
-
-    # Get allies in the selected role
-    allies_in_role = df[ally_column].dropna().unique()
-
-    # Exclude already-selected allies
-    remaining_allies = [ally for ally in allies_in_role if ally not in selected_allies]
-
-# Initial update of selected allies display
-update_selected_allies_display()
 
 # Create the Population Pyramid
 pyramid_plot = create_population_pyramid()
@@ -890,7 +865,6 @@ enemy_role_select.on_change("value", update_enemy_champion_options)
 enemy_champion_select.on_change("value", update_winrate_plot_with_filters)
 
 # Ally-specific callbacks
-ally_role_select.on_change("value", update_ally_synergy_plot_on_role)
 ally_min_games_input.on_change("value", update_ally_synergy_plot)
 
 # Attach sort criterion callback for the Population Pyramid
@@ -908,7 +882,6 @@ min_games_input.on_change("value", update_heatmap)
 update_enemy_champion_options(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
 update_ally_synergy_plot_on_role(None, None, None)
-update_ally_dropdown_options()
 update_heatmap(None, None, None)
 
 # Add the layout to the document
