@@ -218,7 +218,7 @@ def create_winrate_plot():
     Returns:
         tuple: Bokeh figure and average win rate line.
     """
-    p = figure(x_range=[], height=400, width = 900, title="Win Rate Against Enemies", toolbar_location=None, tools="")
+    p = figure(x_range=[], height=500, width = 900, title="Win Rate Against Enemies", toolbar_location=None, tools="")
 
     p.vbar(
         x='enemy_champion',
@@ -510,7 +510,7 @@ def create_ally_synergy_plot():
     Returns:
         tuple: Bokeh figure and overall win rate line.
     """
-    p = figure(x_range=[], height=400, title="Ally Synergies", toolbar_location=None, tools="")
+    p = figure(x_range=[], height=400, width = 900, title="Ally Synergies", toolbar_location=None, tools="")
 
     p.vbar(
         x='ally_champion',
@@ -789,85 +789,49 @@ sort_criterion_select.on_change("value", update_population_pyramid)
 # Layout Assembly and Final Setup                                                  #
 # -------------------------------------------------------------------------------- #
 
-# Spacer for visual alignment
-spacer = Spacer(width=300, height=100)
+# -------------------------------------------------------------------------------- #
+# Updated Layout                                                                   #
+# -------------------------------------------------------------------------------- #
+
+# Spacer for visual alignment (if needed)
+spacer = Spacer(width=300, height=50)
+pyramid_plot = create_population_pyramid()
 
 # Layout for the Win Rate plot with widgets
 winrate_section = column(
-    row(champion_select, role_select, overall_winrate_div),  # Add the div here
-    row(enemy_role_select, min_games_input, enemy_champion_select),
-    winrate_plot
+    row(champion_select, role_select, overall_winrate_div),  # Champion, Role, and Winrate summary
+    row(enemy_role_select, min_games_input, enemy_champion_select),  # Enemy filters
+    winrate_plot  # Plot
 )
 
 # Layout for the Ally Synergies plot with widgets
 ally_synergy_section = column(
-    row(ally_role_select, ally_min_games_input),  # Ally Role and Min Games widgets
-    ally_synergy_plot  # Synergies plot
+    row(ally_role_select, ally_min_games_input),  # Ally Role and Minimum Games widgets
+    ally_synergy_plot  # Plot
 )
 
-# Buttons to dynamically display and remove selected allies
-def update_selected_allies_display():
-    """
-    Dynamically update the display of selected allies.
-    """
-    buttons = []
-    for ally in selected_allies:
-        button = Button(label=f"Remove {ally}", button_type="danger", width=150)
-        button.on_click(lambda ally=ally: remove_ally_from_selection(ally))
-        buttons.append(button)
-    selected_allies_display.children = buttons
-
-
-def remove_ally_from_selection(ally):
-    """
-    Remove an ally from the selected list and update the ally synergies plot.
-    """
-    global selected_allies
-    if ally in selected_allies:
-        selected_allies.remove(ally)
-        update_ally_dropdown_options()  # Refresh available allies in dropdown
-        update_ally_synergy_plot(None, None, None)  # Refresh the plot
-        update_selected_allies_display()  # Update ally display
-
-
-def update_ally_dropdown_options():
-    """
-    Update the Ally dropdown options to exclude already-selected allies.
-    """
-    ally_role = ally_role_select.value
-    role_column_map = {
-        "TOP": "ally_1",
-        "JUNGLE": "ally_2",
-        "MID": "ally_3",
-        "ADC": "ally_4",
-        "SUP": "ally_5",
-    }
-    ally_column = role_column_map.get(ally_role)
-
-    # Get allies in the selected role
-    allies_in_role = df[ally_column].dropna().unique()
-
-    # Exclude already-selected allies
-    remaining_allies = [ally for ally in allies_in_role if ally not in selected_allies]
-
-# Initial update of selected allies display
-update_selected_allies_display()
-
-# Create the Population Pyramid
-pyramid_plot = create_population_pyramid()
-
-# Define the advanced analysis section
-advanced_analysis_section = row(
-    column(sort_criterion_select, pyramid_plot),  # Population Pyramid
-    column(sort_select, heatmap_plot)  # Heatmap and its sorting widget
+# Layout for the Population Pyramid with its sorting selector
+pyramid_section = column(
+    sort_criterion_select,  # Sorting selector for pyramid
+    pyramid_plot  # Plot
 )
 
+# Layout for the Heatmap with its metric sorting selector
+heatmap_section = column(
+    sort_select,  # Metric sorting selector
+    heatmap_plot  # Plot
+)
 
-# Combine all sections into the final layout
+# Combine everything into the final layout
 layout = column(
-    row(winrate_section, ally_synergy_section),
-    advanced_analysis_section
+    row(winrate_section, heatmap_section),  # Top row: Win Rate (left) and Heatmap (right)
+    row(ally_synergy_section, pyramid_section)  # Bottom row: Ally Synergies (left) and Pyramid (right)
 )
+
+# Add layout to Bokeh document
+curdoc().clear()  # Clear any existing layout
+curdoc().add_root(layout)
+
 
 # -------------------------------------------------------------------------------- #
 # Attach Callbacks                                                                 #
@@ -908,7 +872,6 @@ min_games_input.on_change("value", update_heatmap)
 update_enemy_champion_options(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
 update_ally_synergy_plot_on_role(None, None, None)
-update_ally_dropdown_options()
 update_heatmap(None, None, None)
 
 # Add the layout to the document
