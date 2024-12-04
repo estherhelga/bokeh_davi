@@ -577,27 +577,27 @@ heatmap_plot = figure(
     tools=""
 )
 
-# Add rectangles to the heatmap
-heatmap_plot.rect(
+# Create the heatmap rectangles (renderer) and set the initial fill color
+heatmap_renderer = heatmap_plot.rect(
     x="metric",
     y="lane_opponent",
     width=1,
     height=1,
     source=source,
-    fill_color={"field": "value", "transform": color_mappers["winrate"]},
+    fill_color={"field": "value", "transform": color_mappers["winrate"]},  # Initial color mapper
     line_color=None
 )
 
-# Add a color bar
+# Add a color bar to the heatmap
 color_bar = ColorBar(
-    color_mapper=color_mappers["winrate"],
+    color_mapper=color_mappers["winrate"],  # Initial color mapper
     label_standoff=12,
     location=(0, 0),
     orientation="vertical"
 )
 heatmap_plot.add_layout(color_bar, "right")
 
-# Add HoverTool
+# Add HoverTool for interactivity
 hover = HoverTool(
     tooltips=[
         ("Metric", "@metric"),
@@ -611,20 +611,23 @@ heatmap_plot.add_tools(hover)
 
 # Update Function for Heatmap
 def update_heatmap(attr, old, new):
+    """
+    Dynamically update the heatmap based on the selected champion, metric, and threshold.
+    """
     selected_champion = champion_select.value
-    selected_sort_metric = metric_map[sort_select.value]
+    selected_sort_metric = metric_map[sort_select.value]  # Metric to sort by
     min_games = int(min_games_input.value) if min_games_input.value.isdigit() else 50
 
     # Filter data for the selected champion and minimum games
     updated_data = heatmap_data[
-        (heatmap_data['champion'] == selected_champion) & 
+        (heatmap_data['champion'] == selected_champion) &
         (heatmap_data['n_games'] >= min_games)
     ]
 
     # Sort the data by the selected metric
     updated_data = updated_data.sort_values(by=selected_sort_metric, ascending=False)
 
-    # Prepare new data for the heatmap
+    # Prepare new source data
     new_source_data = {
         "lane_opponent": [],
         "metric": [],
@@ -633,41 +636,50 @@ def update_heatmap(attr, old, new):
         "n_games": [],
     }
 
+    # Populate the new data source with normalized values for metrics
     for metric, label in zip(metrics, metric_labels):
         raw_metric = raw_metric_map[label]
         if metric == "winrate":
             for _, row in updated_data.iterrows():
                 new_source_data["lane_opponent"].append(row["lane_opponent"])
                 new_source_data["metric"].append(label)
-                new_source_data["value"].append(row["winrate"])
-                new_source_data["raw_value"].append(row["winrate"])
+                new_source_data["value"].append(row["winrate"])  # Already normalized
+                new_source_data["raw_value"].append(row["winrate"])  # Raw value for tooltip
                 new_source_data["n_games"].append(row["n_games"])
         else:
             metric_min = updated_data[metric].min()
             metric_max = updated_data[metric].max()
 
-            # Avoid divide-by-zero errors
+            # Avoid divide-by-zero errors during normalization
             if metric_max > metric_min:
                 updated_data[metric] = (
                     (updated_data[metric] - metric_min) / (metric_max - metric_min)
                 )
             else:
-                updated_data[metric] = 0.5
+                updated_data[metric] = 0.5  # Neutral value for identical min/max
 
             for _, row in updated_data.iterrows():
                 new_source_data["lane_opponent"].append(row["lane_opponent"])
                 new_source_data["metric"].append(label)
-                new_source_data["value"].append(row[metric])
-                new_source_data["raw_value"].append(row[raw_metric])
+                new_source_data["value"].append(row[metric])  # Normalized value
+                new_source_data["raw_value"].append(row[raw_metric])  # Raw value for tooltip
                 new_source_data["n_games"].append(row["n_games"])
 
+    # Update the source data for the heatmap
     source.data = new_source_data
+
+    # Dynamically update the y_range of the heatmap
     heatmap_plot.y_range.factors = list(updated_data['lane_opponent'].unique())
     heatmap_plot.title.text = f"Performance Metrics Against Opponents ({selected_champion})"
+
+    # Update the heatmap's fill_color dynamically
+    heatmap_renderer.glyph.fill_color = {"field": "value", "transform": color_mappers[selected_sort_metric]}
+
+    # Update the color bar to reflect the selected metric's color mapping
     color_bar.color_mapper = color_mappers[selected_sort_metric]
 
-# Initial Update for Heatmap
-update_heatmap(None, None, None)
+
+
 
 
 # -------------------------------------------------------------------------------- #
@@ -884,6 +896,9 @@ ally_min_games_input.on_change("value", update_ally_synergy_plot)
 # Attach sort criterion callback for the Population Pyramid
 sort_criterion_select.on_change("value", update_population_pyramid)
 
+#Heatmap specific callbacks
+sort_select.on_change("value", update_heatmap)
+min_games_input.on_change("value", update_heatmap)
 
 # -------------------------------------------------------------------------------- #
 # Final Application Setup                                                          #
@@ -894,6 +909,7 @@ update_enemy_champion_options(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
 update_ally_synergy_plot_on_role(None, None, None)
 update_ally_dropdown_options()
+update_heatmap(None, None, None)
 
 # Add the layout to the document
 curdoc().clear()  # Clear any existing layout
