@@ -1,5 +1,5 @@
 import pandas as pd
-from bokeh.layouts import column, row
+from bokeh.layouts import column, row, grid
 from bokeh.models import Select, TextInput, MultiSelect, ColumnDataSource, HoverTool, Span, Spacer, Button, Div, LinearColorMapper, ColorBar, Tooltip, Legend, LegendItem
 from bokeh.plotting import figure, curdoc, show
 from bokeh.models import CustomJSTickFormatter, Label
@@ -361,20 +361,16 @@ winrate_plot, avg_win_rate_line = create_winrate_plot()
 # Initialize empty data source for the ally synergies plot
 ally_synergy_source = ColumnDataSource(data=dict(ally_champion=[], win_rate_percent=[], n_games=[], color=[]))
 
-def calculate_ally_synergies(champion: str, role: str, selected_allies: list, ally_role: str) -> pd.DataFrame:
+def calculate_ally_synergies(champion: str, role: str, ally_role: str) -> pd.DataFrame:
     """
     Calculate ally synergies based on the selected champion, role, and allies.
     Args:
         champion (str): Selected champion.
         role (str): User's role.
-        selected_allies (list): List of selected allies.
         ally_role (str): Selected ally role.
     Returns:
         pd.DataFrame: DataFrame containing ally synergy statistics.
     """
-    if not selected_allies:
-        return pd.DataFrame(columns=['ally_champion', 'win_rate', 'n_games', 'win_rate_percent', 'texture'])
-
     filtered_df = df[(df['champion'] == champion) & (df['team_position'] == role)]
 
     # Map ally roles to columns
@@ -390,11 +386,8 @@ def calculate_ally_synergies(champion: str, role: str, selected_allies: list, al
     if not ally_column:
         return pd.DataFrame()
 
-    # Filter data by allies and ally role
-    combined_df = filtered_df[['win', ally_column]].rename(columns={ally_column: 'ally_champion'})
-    combined_df = combined_df[combined_df['ally_champion'].isin(selected_allies)]
-
     # Aggregate win rates and game counts
+    combined_df = filtered_df[['win', ally_column]].rename(columns={ally_column: 'ally_champion'})
     win_rates = (
         combined_df.groupby('ally_champion')['win']
         .agg(['mean', 'size'])
@@ -402,25 +395,21 @@ def calculate_ally_synergies(champion: str, role: str, selected_allies: list, al
         .rename(columns={'mean': 'win_rate', 'size': 'n_games'})
     )
     win_rates['win_rate_percent'] = (win_rates['win_rate'] * 100).round(2)
-    win_rates['texture'] = ''  # Default no texture
 
     # Filter by minimum games threshold
     min_games = validate_numeric_input(ally_min_games_input.value, default=10)
     win_rates = win_rates[win_rates['n_games'] >= min_games]
 
-    # Filter out allies with win rates less than the overall win rate
+    # Filter allies with win rates above the overall win rate
     overall_winrate = calculate_overall_win_rate(champion)
     win_rates = win_rates[win_rates['win_rate_percent'] > overall_winrate]
 
     return win_rates
 
-
 def update_ally_synergy_plot(attr, old, new):
     """
-    Update the ally synergy plot based on selected allies and roles.
+    Update the ally synergy plot based on the selected ally role.
     """
-    global selected_allies
-    # Fallback if no role is selected
     ally_role = ally_role_select.value
     if not ally_role or ally_role not in roles:
         ally_synergy_source.data = dict(ally_champion=[], win_rate_percent=[], n_games=[], color=[])
@@ -429,31 +418,14 @@ def update_ally_synergy_plot(attr, old, new):
         return
 
     ally_data = calculate_ally_synergies(
-    champion=champion_select.value,
-    role=role_select.value,
-    selected_allies=selected_allies,
-    ally_role=ally_role
+        champion=champion_select.value,
+        role=role_select.value,
+        ally_role=ally_role
     )
 
     # Calculate overall win rate
     overall_winrate = calculate_overall_win_rate(champion_select.value)
-
-    # Update the overall win rate line location
-    overall_winrate = calculate_overall_win_rate(champion_select.value)
     overall_winrate_line.location = overall_winrate
-
-    # Filter allies based on win rates above the overall win rate
-    ally_data = ally_data[ally_data['win_rate_percent'] > overall_winrate]
-
-    # Ensure selected allies are always displayed
-    for ally in selected_allies:
-        if ally not in ally_data['ally_champion'].values:
-            ally_data = pd.concat([ally_data, pd.DataFrame({
-                'ally_champion': [ally],
-                'win_rate_percent': [0],  # Default win rate if no data available
-                'n_games': [0],
-                'color': ['#e54635']
-            })], ignore_index=True)
 
     # Sort allies by win rate in descending order
     ally_data = ally_data.sort_values(by='win_rate_percent', ascending=False)
@@ -466,7 +438,7 @@ def update_ally_synergy_plot(attr, old, new):
     # Update the plot with sorted data
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
-    ally_synergy_plot.title.text = f"Ally Synergies for {champion_select.value} ({role_select.value}) with Selected Allies"
+    ally_synergy_plot.title.text = f"Top Ally Synergies for {champion_select.value} ({role_select.value})"
 
 def update_ally_synergy_plot_on_role(attr, old, new):
     """
@@ -482,49 +454,26 @@ def update_ally_synergy_plot_on_role(attr, old, new):
         ally_synergy_plot.title.text = f"No synergies available for same role ({ally_role})."
         return
 
-    # Get all allies for the selected role
-    role_column_map = {
-        "TOP": "ally_1",
-        "JUNGLE": "ally_2",
-        "MID": "ally_3",
-        "ADC": "ally_4",
-        "SUP": "ally_5",
-    }
-    ally_column = role_column_map.get(ally_role)
-
-    if not ally_column:
-        ally_synergy_source.data = dict(ally_champion=[], win_rate_percent=[], n_games=[], color=[])
-        ally_synergy_plot.x_range.factors = []
-        ally_synergy_plot.title.text = "Invalid role selected."
-        return
-
-    allies_in_role = df[ally_column].dropna().unique().tolist()
     ally_data = calculate_ally_synergies(
         champion=champion_select.value,
         role=user_role,
-        selected_allies=allies_in_role,
         ally_role=ally_role
     )
 
     overall_winrate = calculate_overall_win_rate(champion_select.value)
-
-    # Update the overall win rate line location
     overall_winrate_line.location = overall_winrate
 
-    # Filter allies based on win rates above the overall win rate
-    ally_data = ally_data[ally_data['win_rate_percent'] > overall_winrate]
-
-    # Sort allies by win rate in descending order
+    # Sort allies by win rate
     ally_data = ally_data.sort_values(by='win_rate_percent', ascending=False)
 
     ally_data['color'] = ally_data['win_rate_percent'].apply(
         lambda x: '#2b93b6' if x >= overall_winrate else '#e54635'
     )
 
-    # Update the plot with sorted data
+    # Update the plot
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
-    ally_synergy_plot.title.text = f"Ally Synergies for {champion_select.value} ({role_select.value}) with {ally_role} Allies"
+    ally_synergy_plot.title.text = f"Best {ally_role_select.value} Allies for {champion_select.value} ({role_select.value})"
 
 def create_ally_synergy_plot():
     """
@@ -532,7 +481,7 @@ def create_ally_synergy_plot():
     Returns:
         tuple: Bokeh figure and overall win rate line.
     """
-    p = figure(x_range=[], height=400, title="Ally Synergies", toolbar_location=None, tools="")
+    p = figure(x_range=[], height=400, width=900, title="Ally Synergies", toolbar_location=None, tools="")
 
     p.vbar(
         x='ally_champion',
@@ -547,7 +496,7 @@ def create_ally_synergy_plot():
         hatch_weight=2
     )
 
-    hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games")])
+    hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games"), ("Ally", "@ally_champion")])
     p.add_tools(hover)
 
     p.y_range.start = 0
@@ -563,6 +512,22 @@ def create_ally_synergy_plot():
         line_width=2
     )
     p.add_layout(overall_winrate_line)
+
+    # Add invisible glyphs for the legend
+    synergy_above_avg_glyph = p.vbar(x=[0], top=[1], fill_color='#2b93b6', line_color='white', width=0.1, visible=False)
+    synergy_avg_line_glyph = p.line(x=[0, 1], y=[0, 1], line_color="black", line_dash="dashed", line_width=2, visible=False)
+
+    # Create legend items
+    legend_items = [
+        LegendItem(label="Above Avg. Win Rate", renderers=[synergy_above_avg_glyph]),
+        LegendItem(label="Average Win Rate", renderers=[synergy_avg_line_glyph])
+    ]
+
+    # Add the legend to the plot
+    legend = Legend(items=legend_items, location="top_right", label_text_font_size="10pt")
+    legend.background_fill_alpha = 0  # Transparent background
+    legend.border_line_alpha = 0  # No border
+    p.add_layout(legend)
 
     return p, overall_winrate_line
 
@@ -799,16 +764,16 @@ def update_population_pyramid(attr, old, new):
     # Update the layout's children to replace the old pyramid plot
     advanced_analysis_section.children[0].children[1] = new_pyramid_plot
 
+pyramid_plot = create_population_pyramid() 
+
 
 # -------------------------------------------------------------------------------- #
 # Tooltip Definitions                                                              #
 # -------------------------------------------------------------------------------- #
 
-
-
-# -------------------------------------------------------------------------------- #
-# Layout Assembly and Final Setup                                                  #
-# -------------------------------------------------------------------------------- #
+# # -------------------------------------------------------------------------------- #
+# # Layout Assembly and Final Setup                                                  #
+# # -------------------------------------------------------------------------------- #
 
 # Spacer for visual alignment
 spacer = Spacer(width=300, height=100)
@@ -866,6 +831,8 @@ enemy_champion_select.on_change("value", update_winrate_plot_with_filters)
 
 # Ally-specific callbacks
 ally_min_games_input.on_change("value", update_ally_synergy_plot)
+ally_role_select.on_change("value", update_ally_synergy_plot_on_role)
+
 
 # Attach sort criterion callback for the Population Pyramid
 sort_criterion_select.on_change("value", update_population_pyramid)
