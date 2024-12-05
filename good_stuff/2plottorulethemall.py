@@ -7,7 +7,7 @@ from bokeh.palettes import linear_palette
 from bokeh.palettes import Blues256
 import numpy as np
 from sklearn.neighbors import KernelDensity
-from bokeh.palettes import RdYlGn11
+from bokeh.palettes import RdYlGn11, Viridis256
 from bokeh.models.dom import HTML
 from bokeh.models.glyphs import Rect, Line
 import requests
