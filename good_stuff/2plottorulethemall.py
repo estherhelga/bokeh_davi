@@ -10,6 +10,7 @@ from sklearn.neighbors import KernelDensity
 from bokeh.palettes import RdYlGn11
 from bokeh.models.dom import HTML
 from bokeh.models.glyphs import Rect, Line
+import requests
 
 
 # -------------------------------------------------------------------------------- #
@@ -201,6 +202,72 @@ def update_enemy_champion_options(attr, old, new):
     # Update dropdown options
     enemy_champion_select.options = sorted(valid_enemies.tolist())
     enemy_champion_select.value = ""  # Reset selection
+
+
+# Placeholder for champion stats with image
+overall_avg_win_rate = calculate_overall_win_rate(champions[0])  # First champion's stats
+total_games = df[df['champion'] == champions[0]].shape[0]
+champion_stats = Div(
+    text=f"""
+    <div style="
+        display: flex; 
+        align-items: center; 
+        color: black; 
+        font-family: Arial, sans-serif; 
+        background-color: #f9f9f9; 
+        border: 1px solid black; 
+        border-radius: 5px; 
+        padding: 10px;
+    ">
+        <img src='http://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/{champions[0]}.png' 
+             style="width:50px; height:50px; margin-right:10px; border-radius:5px;">
+        <div>
+            <span style="font-size:20px; font-weight:bold;">{overall_avg_win_rate:.1f}%</span> 
+            Average Win Rate for 
+            <span style="font-size:20px; font-weight:bold;">{champions[0]}</span> 
+            High Rank OTPs | 
+            <span style="font-size:20px; font-weight:bold;">{total_games}</span> games
+        </div>
+    </div>
+    """,
+    width=700, height=60
+)
+
+def update_champion_image_and_stats(attr, old, new):
+    """
+    Update the champion stats (including the icon) when the selected champion changes.
+    """
+    selected_champion = champion_select.value
+
+    # Calculate stats
+    overall_winrate = calculate_overall_win_rate(selected_champion)
+    total_games = df[df['champion'] == selected_champion].shape[0]
+
+    # Update the stats display with image and formatted text
+    champion_stats.text = (
+        f"""
+        <div style="
+            display: flex; 
+            align-items: center; 
+            color: black; 
+            font-family: Arial, sans-serif; 
+            background-color: #f9f9f9; 
+            border: 1px solid black; 
+            border-radius: 5px; 
+            padding: 5px;
+        ">
+            <img src='http://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/{selected_champion}.png' 
+                 style="width:50px; height:50px; margin-right:10px; border-radius:5px;">
+            <div>
+                <span style="font-size:15px; font-weight:bold;">{overall_winrate:.1f}%</span> 
+                Average Win Rate for 
+                <span style="font-size:15px; font-weight:bold;">{selected_champion}</span> 
+                High Rank OTPs | 
+                <span style="font-size:15px; font-weight:bold;">{total_games}</span> games
+            </div>
+        </div>
+        """
+    )
 
 
 # -------------------------------------------------------------------------------- #
@@ -815,11 +882,17 @@ pyramid_plot = create_population_pyramid()
 # # -------------------------------------------------------------------------------- #
 
 # Spacer for visual alignment
-spacer = Spacer(width=150, height=100)
+spacer = Spacer(width=70, height=100)
 
-# Layout for the Win Rate plot with widgets
+selectors_with_info = row(
+    row(champion_select, role_select),  # Align Champion and Role selectors horizontally
+    champion_stats  # Combined image and stats
+)
+
+
+# Update the winrate section layout
 winrate_section = column(
-    row(champion_select, role_select),  # Add the div here
+    selectors_with_info,  # Updated layout with image and stats
     row(enemy_role_select, min_games_input, enemy_champion_select),
     winrate_plot
 )
@@ -861,7 +934,10 @@ padded_layout = column(
 # Attach Callbacks                                                                 #
 # -------------------------------------------------------------------------------- #
 
-# Global callbacks for Champion and Role selections
+# Global callbacks for Champion and Role selections + Stats
+champion_select.on_change("value", update_champion_image_and_stats)
+
+
 champion_select.on_change("value", update_winrate_plot_with_filters)
 champion_select.on_change("value", update_ally_synergy_plot_on_role)
 champion_select.on_change("value", update_population_pyramid)
@@ -906,6 +982,7 @@ update_enemy_champion_options(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
 update_ally_synergy_plot_on_role(None, None, None)
 update_heatmap(None, None, None)
+update_champion_image_and_stats(None, None, None)  # Add this to update image and stats on startup
 
 # Add the layout to the document
 curdoc().clear()  # Clear any existing layout
