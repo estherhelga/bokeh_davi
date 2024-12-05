@@ -856,8 +856,18 @@ def create_population_pyramid():
     sorted_items = merged_data['item_name'][::-1]
 
     # Assign bar colors
-    frequency_colors = [selected_blue_color if sort_by == "Frequency" else non_selected_gray_color] * len(merged_data)
-    winrate_colors = [selected_blue_color if sort_by == "Win Rate" else non_selected_gray_color] * len(merged_data)
+    merged_data['frequency_color'] = [
+        selected_blue_color if sort_by == "Frequency" else non_selected_gray_color
+    ] * len(merged_data)
+    merged_data['winrate_color'] = [
+        selected_blue_color if sort_by == "Win Rate" else non_selected_gray_color
+    ] * len(merged_data)
+
+    # Negate frequency values for left-side rendering
+    merged_data['frequency_percentage_neg'] = -merged_data['frequency_percentage']
+
+    # Create a ColumnDataSource
+    source = ColumnDataSource(merged_data)
 
     # Create the figure
     p = figure(
@@ -867,36 +877,49 @@ def create_population_pyramid():
         x_range=(-100, 100),
         y_range=list(sorted_items),
         y_axis_label="",
+        tools="",
     )
 
     # Add bars for frequency and win rate
     bin_width = 0.8
     p.hbar(
-        y=merged_data['item_name'],
-        right=merged_data['frequency_percentage'],
+        y='item_name',
+        right='frequency_percentage_neg',  # Negated for left-side rendering
         height=bin_width,
-        color=frequency_colors,
+        color='frequency_color',  # Reference color column in the source
         legend_label="Frequency %",
+        source=source,
     )
     p.hbar(
-        y=merged_data['item_name'],
-        right=-merged_data['win_rate'],  # Negative for the left side
+        y='item_name',
+        right='win_rate',  # Positive for right-side rendering
         height=bin_width,
-        color=winrate_colors,
+        color='winrate_color',  # Reference color column in the source
         legend_label="Win Rate %",
+        source=source,
     )
 
+    # Add HoverTool
+    hover = HoverTool(
+        tooltips=[
+            ("Item", "@item_name"),
+            ("Frequency (%)", "@frequency_percentage"),
+            ("Win Rate (%)", "@win_rate"),
+        ]
+    )
+    p.add_tools(hover)
 
     # Customize axes
     p.xaxis.ticker = list(range(-100, 101, 10))
     p.xaxis.formatter = CustomJSTickFormatter(code="return Math.abs(tick);")
-    p.xaxis.axis_label = "Win Rate      " + "%" + "     Frequency"
+    p.xaxis.axis_label = "Frequency      " + "%" + "     Win Rate"
     p.yaxis.axis_label_text_font_size = "14pt"
 
     # Hide the legend
     p.legend.visible = False
 
     return p
+
 
 
 def update_population_pyramid(attr, old, new):
@@ -911,13 +934,10 @@ def update_population_pyramid(attr, old, new):
 
 pyramid_plot = create_population_pyramid()
 
-# -------------------------------------------------------------------------------- #
-# Tooltip Definitions                                                              #
-# -------------------------------------------------------------------------------- #
 
-# # -------------------------------------------------------------------------------- #
-# # Layout Assembly and Final Setup                                                  #
-# # -------------------------------------------------------------------------------- #
+#-------------------------------------------------------------------------------- #
+#Layout Assembly and Final Setup                                                  #
+#-------------------------------------------------------------------------------- #
 
 # Spacer for visual alignment
 spacer = Spacer(width=70, height=100)
