@@ -245,7 +245,7 @@ def create_winrate_plot():
         tuple: Bokeh figure and average win rate line.
     """
     # Create the figure
-    p = figure(x_range=[], height=400, width=900, title="Win Rate Against Enemies", toolbar_location=None, tools="")
+    p = figure(x_range=[], height=500, width=1200, title="Win Rate Against Enemies", toolbar_location=None, tools="")
 
     # Add the bars to the plot
     bars = p.vbar(
@@ -299,6 +299,7 @@ def create_winrate_plot():
 def update_winrate_plot_with_filters(attr, old, new):
     """
     Update the Win Rate plot based on filters.
+    Always highlight the selected enemy, whether it is already in the graph or not.
     """
     global overall_avg_win_rate
 
@@ -358,16 +359,25 @@ def update_winrate_plot_with_filters(attr, old, new):
     top_5['hatch'] = ''
     bottom_5['hatch'] = ''
 
+    # Combine top and bottom 5 into a single dataset
+    combined = pd.concat([top_5, bottom_5]).drop_duplicates(subset=['enemy_champion'])
+
     # Handle specific enemy selection
-    if selected_enemy and selected_enemy in win_rates['enemy_champion'].values:
+    if selected_enemy:
         selected_enemy_row = win_rates[win_rates['enemy_champion'] == selected_enemy].copy()
-        selected_enemy_row['color'] = (
-            '#2b93b6' if selected_enemy_row['win_rate_percent'].iloc[0] > overall_avg_win_rate else '#e54635'
-        )
-        selected_enemy_row['hatch'] = '/'
-        combined = pd.concat([top_5, bottom_5, selected_enemy_row]).drop_duplicates(subset=['enemy_champion'])
-    else:
-        combined = pd.concat([top_5, bottom_5])
+        if not selected_enemy_row.empty:
+            # Assign special color and hatch to the selected enemy
+            selected_enemy_row['color'] = (
+                '#2b93b6' if selected_enemy_row['win_rate_percent'].iloc[0] > overall_avg_win_rate else '#e54635'
+            )
+            selected_enemy_row['hatch'] = '/'
+
+            # Update styling if the enemy is already in the dataset
+            combined.update(selected_enemy_row)
+
+            # If not already in the dataset, add it
+            if selected_enemy not in combined['enemy_champion'].values:
+                combined = pd.concat([combined, selected_enemy_row])
 
     # Update plot data
     combined = combined.sort_values(by="win_rate", ascending=False)
@@ -508,7 +518,7 @@ def create_ally_synergy_plot():
     Returns:
         tuple: Bokeh figure and overall win rate line.
     """
-    p = figure(x_range=[], height=400, width=900, title="Ally Synergies", toolbar_location=None, tools="")
+    p = figure(x_range=[], height=500, width=1200, title="Ally Synergies", toolbar_location=None, tools="")
 
     p.vbar(
         x='ally_champion',
@@ -588,7 +598,9 @@ heatmap_plot = figure(
     x_axis_label="Metrics",
     y_axis_label="Opponents",
     toolbar_location=None,
-    tools=""
+    tools="",
+    width=750,  # Horizontal size
+    height=650  # Vertical size
 )
 
 # Create the heatmap rectangles (renderer) and set the initial fill color
@@ -721,7 +733,7 @@ def create_population_pyramid():
 
     if pyramid_data.empty:
         # Return an empty plot if no data is available
-        p = figure(title="Population Pyramid: No Data Available", height=400, width=800)
+        p = figure(title="Population Pyramid: No Data Available", height=400, width=650)
         return p
 
     # Prepare data for the pyramid
@@ -746,7 +758,7 @@ def create_population_pyramid():
     p = figure(
         title=f"Population Pyramid for {champion_name}: {sort_by} %",
         height=400,
-        width=800,
+        width=750,
         x_range=(-100, 100),
         y_range=list(sorted_items),
         y_axis_label="Items",
@@ -803,7 +815,7 @@ pyramid_plot = create_population_pyramid()
 # # -------------------------------------------------------------------------------- #
 
 # Spacer for visual alignment
-spacer = Spacer(width=200, height=100)
+spacer = Spacer(width=150, height=100)
 
 # Layout for the Win Rate plot with widgets
 winrate_section = column(
@@ -830,11 +842,19 @@ advanced_analysis_section = column(
       # Heatmap and its sorting widget
 )
 
+left_padding = Spacer(width=25)  # Adjust the width as needed
+top_padding = Spacer(height=10)  # Adjust the height as needed
 
-# Combine all sections into the final layout
+ # Combine all sections into the final layout
 layout = row(
     column(winrate_section, ally_synergy_section), spacer,
     advanced_analysis_section
+)
+
+# Adjust the layout
+padded_layout = column(
+    top_padding,  # Add padding to the top
+    row(left_padding, layout), background="pink" # Add left padding
 )
 
 # -------------------------------------------------------------------------------- #
@@ -862,6 +882,9 @@ enemy_role_select.on_change("value", update_enemy_champion_options)
 champion_select.on_change("value", update_enemy_champion_options)
 role_select.on_change("value", update_enemy_champion_options)
 
+enemy_role_select.on_change("value", update_winrate_plot_with_filters)
+
+
 # Ally-specific callbacks
 ally_min_games_input.on_change("value", update_ally_synergy_plot)
 ally_role_select.on_change("value", update_ally_synergy_plot_on_role)
@@ -886,4 +909,4 @@ update_heatmap(None, None, None)
 
 # Add the layout to the document
 curdoc().clear()  # Clear any existing layout
-curdoc().add_root(layout)
+curdoc().add_root(padded_layout)
