@@ -152,15 +152,28 @@ def validate_numeric_input(value: str, default: int = 10) -> int:
 
 def update_enemy_champion_options(attr, old, new):
     """
-    Update the enemy champion options based on the selected enemy role and refresh the plot.
+    Update the enemy champion options based on the selected enemy role,
+    champion, role, and minimum games threshold.
     """
     selected_role = enemy_role_select.value
+    selected_champion = champion_select.value
+    selected_user_role = role_select.value
+    min_games = validate_numeric_input(min_games_input.value, default=50)
+
+    # Filter data for the selected champion and role
+    filtered_df = df[(df['champion'] == selected_champion) & (df['team_position'] == selected_user_role)]
+
     if selected_role == "ANY":
         # Combine all enemy columns to get unique enemies
-        unique_enemies = pd.concat([
-            df['enemy_1'], df['enemy_2'], df['enemy_3'], df['enemy_4'], df['enemy_5']
-        ]).unique()
+        combined_df = pd.concat([
+            filtered_df[['win', 'enemy_1']].rename(columns={'enemy_1': 'enemy_champion'}),
+            filtered_df[['win', 'enemy_2']].rename(columns={'enemy_2': 'enemy_champion'}),
+            filtered_df[['win', 'enemy_3']].rename(columns={'enemy_3': 'enemy_champion'}),
+            filtered_df[['win', 'enemy_4']].rename(columns={'enemy_4': 'enemy_champion'}),
+            filtered_df[['win', 'enemy_5']].rename(columns={'enemy_5': 'enemy_champion'})
+        ])
     else:
+        # Map the role to the appropriate column and filter
         role_column_map = {
             "TOP": "enemy_1",
             "JUNGLE": "enemy_2",
@@ -168,13 +181,27 @@ def update_enemy_champion_options(attr, old, new):
             "ADC": "enemy_4",
             "SUPPORT": "enemy_5"
         }
-        column = role_column_map.get(selected_role, None)
-        unique_enemies = df[column].unique() if column else []
+        column = role_column_map.get(selected_role)
+        if column:
+            combined_df = filtered_df.rename(columns={column: "enemy_champion"})
+        else:
+            combined_df = pd.DataFrame(columns=['win', 'enemy_champion'])
 
-    # Update dropdown options and reset selection
-    enemy_champion_select.options = sorted(unique_enemies.tolist())
-    enemy_champion_select.value = ""
-    update_winrate_plot_with_filters(attr, old, new)
+    # Aggregate win rate and games played
+    aggregated_data = (
+        combined_df.groupby('enemy_champion')['win']
+        .agg(['size'])
+        .reset_index()
+        .rename(columns={'size': 'n_games'})
+    )
+
+    # Filter by the minimum games threshold
+    valid_enemies = aggregated_data[aggregated_data['n_games'] >= min_games]['enemy_champion']
+
+    # Update dropdown options
+    enemy_champion_select.options = sorted(valid_enemies.tolist())
+    enemy_champion_select.value = ""  # Reset selection
+
 
 # -------------------------------------------------------------------------------- #
 # Shared Global Widgets                                                           #
@@ -829,6 +856,11 @@ role_select.on_change("value", update_heatmap)
 min_games_input.on_change("value", update_winrate_plot_with_filters)
 enemy_role_select.on_change("value", update_enemy_champion_options)
 enemy_champion_select.on_change("value", update_winrate_plot_with_filters)
+
+min_games_input.on_change("value", update_enemy_champion_options)
+enemy_role_select.on_change("value", update_enemy_champion_options)
+champion_select.on_change("value", update_enemy_champion_options)
+role_select.on_change("value", update_enemy_champion_options)
 
 # Ally-specific callbacks
 ally_min_games_input.on_change("value", update_ally_synergy_plot)
