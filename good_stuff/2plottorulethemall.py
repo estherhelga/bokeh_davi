@@ -7,11 +7,11 @@ from bokeh.palettes import linear_palette
 from bokeh.palettes import Blues256
 import numpy as np
 from sklearn.neighbors import KernelDensity
-from bokeh.palettes import RdYlGn11, Viridis256
+from bokeh.palettes import RdYlGn11, Viridis256, RdYlBu11, RdYlBu
 from bokeh.models.dom import HTML
 from bokeh.models.glyphs import Rect, Line
 import requests
-
+import plotly.express as px
 
 # -------------------------------------------------------------------------------- #
 # Data Loading and Initialization                                                  #
@@ -59,6 +59,9 @@ except FileNotFoundError:
 except pd.errors.ParserError as e:
     raise RuntimeError(f"Error parsing CSV file: {e}")
 
+
+color_palette = ["#0d4254", "#10485c", "#134f64", "#16566d", "#195c74", "#1b627c", "#1d6983", "#1f6f8b", "#217593", "#227b9a", "#2481a2", "#2687a8", "#288caf", "#2d92b4", "#4097b3", "#509bb2", "#5b9fb1", "#68a3b1", "#71a8b1", "#7bacb1", "#83b0b2", "#8bb4b3", "#92b8b4", "#98bdb5", "#9fc1b6", "#a5c5b7", "#aac9b8", "#b0cdb8", "#b6d1b8", "#bad5b8", "#c0d8b8", "#c4dcb7", "#cadfb6", "#cfe3b6", "#d4e6b4", "#d8e9b3", "#ddebb2", "#e2eeb0", "#e5f1af", "#eaf3ae", "#edf5ad", "#f0f7ac", "#f3f8ab", "#f6faaa", "#f8fba9", "#f9fca9", "#fbfca9", "#fcfda8", "#fdfea8", "#ffffa8", "#fefda7", "#fefca6", "#fefba5", "#fefaa5", "#fef9a4", "#fef7a3", "#fef5a1", "#fef29f", "#fef09e", "#fdec9b", "#fde999", "#fde696", "#fde294", "#fcdd90", "#fcd98e", "#fcd58a", "#fbd087", "#fbcb83", "#fac680", "#f9c07c", "#f9bb78", "#f8b575", "#f7af71", "#f7a86c", "#f6a269", "#f49b64", "#f39460", "#f28d5b", "#f18657", "#ef7e52", "#ee764d", "#ec6d48", "#ea6543", "#e85b3e", "#e65139", "#e44634", "#dc4231", "#d53e2f", "#cc3c2d", "#c3392a", "#ba3729", "#b23426", "#a93125", "#a02e22", "#972b1f", "#8e271d", "#84241a", "#7b2017", "#721d14"]
+
 # Load heatmap data with error handling
 try:
     heatmap_file_path = 'heatmap_data.csv'
@@ -71,7 +74,7 @@ try:
 
     # Additional metrics columns (ensure normalization-ready data)
     metrics = [
-        "winrate",  # Add winrate as the first metric
+        "normalized_winrate",  # Add winrate as the first metric
         "normalized_lane_minions_first_10_minutes",
         "normalized_max_cs_advantage_on_lane_opponent",
         "normalized_max_level_lead_lane_opponent",
@@ -82,13 +85,13 @@ try:
 
     # Define color mappers for each metric
     color_mappers = {
-        "winrate": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
-        "normalized_lane_minions_first_10_minutes": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
-        "normalized_max_cs_advantage_on_lane_opponent": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
-        "normalized_max_level_lead_lane_opponent": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
-        "normalized_turret_plates_taken": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
-        "normalized_solo_kills": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),
-        "normalized_deaths": LinearColorMapper(palette=RdYlGn11[::-1], low=0, high=1),  # Non-reversed colormap for Deaths
+        "normalized_winrate": LinearColorMapper(palette=color_palette[::-1], low=0, high=1),
+        "normalized_lane_minions_first_10_minutes": LinearColorMapper(palette=color_palette[::-1], low=0, high=1),
+        "normalized_max_cs_advantage_on_lane_opponent": LinearColorMapper(palette=color_palette[::-1], low=0, high=1),
+        "normalized_max_level_lead_lane_opponent": LinearColorMapper(palette=color_palette[::-1], low=0, high=1),
+        "normalized_turret_plates_taken": LinearColorMapper(palette=color_palette[::-1], low=0, high=1),
+        "normalized_solo_kills": LinearColorMapper(palette=color_palette[::-1], low=0, high=1),
+        "normalized_deaths": LinearColorMapper(palette=color_palette[::-1], low=0, high=1),  # Non-reversed colormap for Deaths
     }
 
 
@@ -662,8 +665,6 @@ heatmap_plot = figure(
     title=f"Performance Metrics Against Opponents ({default_champion})",
     x_range=metric_labels,
     y_range=list(filtered_data['lane_opponent'].unique()),
-    x_axis_label="Metrics",
-    y_axis_label="Opponents",
     toolbar_location=None,
     tools="",
     width=750,  # Horizontal size
@@ -677,18 +678,25 @@ heatmap_renderer = heatmap_plot.rect(
     width=1,
     height=1,
     source=source,
-    fill_color={"field": "value", "transform": color_mappers["winrate"]},  # Initial color mapper
+    fill_color={"field": "value", "transform": color_mappers["normalized_winrate"]},  # Initial color mapper
     line_color=None
 )
 
 # Add a color bar to the heatmap
+from bokeh.models import FixedTicker, PrintfTickFormatter
+
+# Modify the color bar to remove numbers and add custom labels
 color_bar = ColorBar(
-    color_mapper=color_mappers["winrate"],  # Initial color mapper
+    color_mapper=color_mappers["normalized_winrate"],  # Replace with your specific color mapper
     label_standoff=12,
     location=(0, 0),
-    orientation="vertical"
+    orientation="vertical",
+    major_label_overrides={0: "", 0.2: "", 0.4: "", 0.6: "", 0.8: "", 1: "Better"},  # Override labels
+    major_tick_line_color=None,  # Remove tick lines
+    formatter=PrintfTickFormatter(format="")  # Remove numbers entirely
 )
 heatmap_plot.add_layout(color_bar, "right")
+
 
 # Add HoverTool for interactivity
 hover = HoverTool(
@@ -716,6 +724,36 @@ def update_heatmap(attr, old, new):
         (heatmap_data['champion'] == selected_champion) &
         (heatmap_data['n_games'] >= min_games)
     ]
+
+    # Make new normalized columns for the updated data
+    updated_data['normalized_turret_plates_taken'] = (updated_data['turret_plates_taken'] - updated_data['turret_plates_taken'].min()) / (updated_data['turret_plates_taken'].max() - updated_data['turret_plates_taken'].min())
+    updated_data['normalized_solo_kills'] = (updated_data['solo_kills'] - updated_data['solo_kills'].min()) / (updated_data['solo_kills'].max() - updated_data['solo_kills'].min())
+    updated_data['normalized_deaths'] = (updated_data['deaths'] - updated_data['deaths'].min()) / (updated_data['deaths'].max() - updated_data['deaths'].min())
+    updated_data['normalized_max_level_lead_lane_opponent'] = (updated_data['max_level_lead_lane_opponent'] - updated_data['max_level_lead_lane_opponent'].min()) / (updated_data['max_level_lead_lane_opponent'].max() - updated_data['max_level_lead_lane_opponent'].min())
+    updated_data['normalized_max_cs_advantage_on_lane_opponent'] = (updated_data['max_cs_advantage_on_lane_opponent'] - updated_data['max_cs_advantage_on_lane_opponent'].min()) / (updated_data['max_cs_advantage_on_lane_opponent'].max() - updated_data['max_cs_advantage_on_lane_opponent'].min())
+    updated_data['normalized_lane_minions_first_10_minutes'] = (updated_data['lane_minions_first_10_minutes'] - updated_data['lane_minions_first_10_minutes'].min()) / (updated_data['lane_minions_first_10_minutes'].max() - updated_data['lane_minions_first_10_minutes'].min())
+    updated_data['normalized_winrate'] = (updated_data['winrate'] - updated_data['winrate'].min()) / (updated_data['winrate'].max() - updated_data['winrate'].min())
+
+    # Invert deaths for better visualization
+    updated_data['normalized_deaths'] = 1 - updated_data['normalized_deaths']
+
+    # # Normalize around the mean 
+    # updated_data['normalized_turret_plates_taken'] = (updated_data['turret_plates_taken'] - updated_data['turret_plates_taken'].mean()) / updated_data['turret_plates_taken'].std()
+    # updated_data['normalized_solo_kills'] = (updated_data['solo_kills'] - updated_data['solo_kills'].mean()) / updated_data['solo_kills'].std()
+    # updated_data['normalized_deaths'] = (updated_data['deaths'] - updated_data['deaths'].mean()) / updated_data['deaths'].std()
+    # updated_data['normalized_max_level_lead_lane_opponent'] = (updated_data['max_level_lead_lane_opponent'] - updated_data['max_level_lead_lane_opponent'].mean()) / updated_data['max_level_lead_lane_opponent'].std()
+    # updated_data['normalized_max_cs_advantage_on_lane_opponent'] = (updated_data['max_cs_advantage_on_lane_opponent'] - updated_data['max_cs_advantage_on_lane_opponent'].mean()) / updated_data['max_cs_advantage_on_lane_opponent'].std()
+    # updated_data['normalized_lane_minions_first_10_minutes'] = (updated_data['lane_minions_first_10_minutes'] - updated_data['lane_minions_first_10_minutes'].mean()) / updated_data['lane_minions_first_10_minutes'].std()
+    # updated_data['normalized_winrate'] = (updated_data['winrate'] - updated_data['winrate'].mean()) / updated_data['winrate'].std()
+
+
+    # updated_data['normalized_turret_plates_taken'] = updated_data['turret_plates_taken']
+    # updated_data['normalized_solo_kills'] = updated_data['solo_kills']
+    # updated_data['normalized_deaths'] = updated_data['deaths']
+    # updated_data['normalized_max_level_lead_lane_opponent'] = updated_data['max_level_lead_lane_opponent']
+    # updated_data['normalized_max_cs_advantage_on_lane_opponent'] = updated_data['max_cs_advantage_on_lane_opponent']
+    # updated_data['normalized_lane_minions_first_10_minutes'] = updated_data['lane_minions_first_10_minutes']
+    # updated_data['normalized_winrate'] = updated_data['winrate']
 
     # Sort the data by the selected metric
     updated_data = updated_data.sort_values(by=selected_sort_metric, ascending=False)
@@ -763,7 +801,7 @@ def update_heatmap(attr, old, new):
 
     # Dynamically update the y_range of the heatmap
     heatmap_plot.y_range.factors = list(reversed(updated_data['lane_opponent'].unique()))
-    heatmap_plot.title.text = f"Performance Metrics Against {role_select.value} Enemies as {selected_champion} ({role_select.value})"
+    heatmap_plot.title.text = f"Performance Metrics Against {role_select.value} Enemies as {selected_champion} ({role_select.value}) - Color Ranked by Normalized Values"
 
     # Update the heatmap's fill_color dynamically
     heatmap_renderer.glyph.fill_color = {"field": "value", "transform": color_mappers[selected_sort_metric]}
@@ -823,7 +861,7 @@ def create_population_pyramid():
 
     # Create the figure
     p = figure(
-        title=f"Population Pyramid for {champion_name}: {sort_by} %",
+        title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Sorted By {sort_by} %",
         height=400,
         width=750,
         x_range=(-100, 100),
@@ -927,7 +965,7 @@ layout = row(
 # Adjust the layout
 padded_layout = column(
     top_padding,  # Add padding to the top
-    row(left_padding, layout), background="pink" # Add left padding
+    row(left_padding, layout), background="white" # Add left padding
 )
 
 # -------------------------------------------------------------------------------- #
