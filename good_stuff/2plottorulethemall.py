@@ -106,10 +106,10 @@ try:
     ]
 
     metric_labels = [
-        "Winrate",  # Label for winrate
-        "CS First 10m",
-        "CS Advantage",
-        "Level Lead",
+        "Win Rate",  # Label for winrate
+        "CS First 10min",
+        "Max. \nCS Advantage",
+        "Max. \nLevel Lead",
         "Turret Plates",
         "Solo Kills",
         "Deaths",
@@ -296,10 +296,10 @@ ally_role_select = Select(title="Ally Role:", value="JUNGLE", options=roles, wid
 ally_min_games_input = TextInput(title="Minimum Games:", value="50", width=100)
 
 # Population Pyramid
-sort_criterion_select = Select(title="Sort By:", value="Frequency", options=["Frequency", "Winrate"], width=100)
+sort_criterion_select = Select(title="Sort By:", value="Frequency", options=["Frequency", "Win Rate"], width=100)
 
 # Sort Selector Widget for Heatmap
-sort_select = Select(title="Sort By:", value="Winrate", options=metric_labels, width=100)
+sort_select = Select(title="Sort By:", value="Win Rate", options=metric_labels, width=100)
 
 # -------------------------------------------------------------------------------- #
 # Creation of the Win Rate Against Enemies Plot                                    #
@@ -850,23 +850,23 @@ def create_population_pyramid():
     # Sort by the selected criterion
     if sort_by == "Frequency":
         merged_data.sort_values('frequency_percentage', ascending=False, inplace=True)
-    elif sort_by == "Winrate":
+    elif sort_by == "Win Rate":
         merged_data.sort_values('win_rate', ascending=False, inplace=True)
 
     sorted_items = merged_data['item_name'][::-1]
 
     # Assign bar colors
     frequency_colors = [selected_blue_color if sort_by == "Frequency" else non_selected_gray_color] * len(merged_data)
-    winrate_colors = [selected_blue_color if sort_by == "Winrate" else non_selected_gray_color] * len(merged_data)
+    winrate_colors = [selected_blue_color if sort_by == "Win Rate" else non_selected_gray_color] * len(merged_data)
 
     # Create the figure
     p = figure(
-        title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Sorted By {sort_by} %",
+        title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Showing Items With at Least 3% Frequency",
         height=400,
         width=750,
         x_range=(-100, 100),
         y_range=list(sorted_items),
-        y_axis_label="Items",
+        y_axis_label="",
     )
 
     # Add bars for frequency and win rate
@@ -886,10 +886,11 @@ def create_population_pyramid():
         legend_label="Win Rate %",
     )
 
+
     # Customize axes
     p.xaxis.ticker = list(range(-100, 101, 10))
     p.xaxis.formatter = CustomJSTickFormatter(code="return Math.abs(tick);")
-    p.xaxis.axis_label = "Percentage"
+    p.xaxis.axis_label = "Win Rate      " + "%" + "     Frequency"
     p.yaxis.axis_label_text_font_size = "14pt"
 
     # Hide the legend
@@ -908,8 +909,7 @@ def update_population_pyramid(attr, old, new):
     # Update the layout's children to replace the old pyramid plot
     advanced_analysis_section.children[1].children[0] = column(sort_criterion_select, new_pyramid_plot)
 
-pyramid_plot = create_population_pyramid() 
-
+pyramid_plot = create_population_pyramid()
 
 # -------------------------------------------------------------------------------- #
 # Tooltip Definitions                                                              #
