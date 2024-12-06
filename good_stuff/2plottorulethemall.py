@@ -842,9 +842,8 @@ hover = HoverTool(
         </div>
         <div>
             <span style="font-size: 14px; font-weight: bold;">@lane_opponent</span><br>
-            Metric: <span style="font-size: 12px;">@metric</span><br>
+            @metric: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
             Normalized Value: <span style="font-size: 12px;">@value{0.2f}</span><br>
-            Raw Value: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
             Games Played: <span style="font-size: 12px;">@n_games</span>
         </div>
     </div>
