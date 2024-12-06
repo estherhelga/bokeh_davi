@@ -287,7 +287,7 @@ overall_winrate_div = Div(text=f"Overall Win Rate: {overall_avg_win_rate:.2f}%",
 
 # Enemy-specific widgets
 enemy_roles = ["ANY", "TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]
-enemy_role_select = Select(title="Enemy Role:", value="ANY", options=enemy_roles, width=100)
+enemy_role_select = Select(title="Enemy Role:", value="TOP", options=enemy_roles, width=100)
 enemy_champion_select = Select(title="Specific Enemy:", value="", options=[], width=100)
 min_games_input = TextInput(title="Minimum Games:", value="50", width=100)
 
@@ -315,7 +315,7 @@ def create_winrate_plot():
         tuple: Bokeh figure and average win rate line.
     """
     # Create the figure
-    p = figure(x_range=[], height=500, width=1200, title="Win Rate Against Enemies", toolbar_location=None, tools="")
+    p = figure(x_range=[], height=370, width=1050, title="Win Rate Against Enemies", toolbar_location=None, tools="")
 
     # Add the bars to the plot
     bars = p.vbar(
@@ -592,7 +592,7 @@ def create_ally_synergy_plot():
     Returns:
         tuple: Bokeh figure and overall win rate line.
     """
-    p = figure(x_range=[], height=500, width=1200, title="Ally Synergies", toolbar_location=None, tools="")
+    p = figure(x_range=[], height=370, width=1050, title="Ally Synergies", toolbar_location=None, tools="")
 
     p.vbar(
         x='ally_champion',
@@ -671,8 +671,8 @@ heatmap_plot = figure(
     y_range=list(filtered_data['lane_opponent'].unique()),
     toolbar_location=None,
     tools="",
-    width=750,  # Horizontal size
-    height=650  # Vertical size
+    width=700,  # Horizontal size
+    height=530 # Vertical size
 )
 
 # Create the heatmap rectangles (renderer) and set the initial fill color
@@ -717,47 +717,54 @@ heatmap_plot.add_tools(hover)
 # Update Function for Heatmap
 def update_heatmap(attr, old, new):
     """
-    Dynamically update the heatmap based on the selected champion, metric, and threshold.
+    Dynamically update the heatmap based on the selected champion, role, metric, and threshold.
     """
     selected_champion = champion_select.value
     selected_sort_metric = metric_map[sort_select.value]  # Metric to sort by
+    selected_role = role_select.value  # Selected role (TOP, JUNGLE, etc.)
     min_games = int(min_games_input.value) if min_games_input.value.isdigit() else 50
 
-    # Filter data for the selected champion and minimum games
+    # Define a mapping from lane_opponent to roles (adjust based on your data structure)
+    role_map = {
+        "TOP": "top_opponents",
+        "JUNGLE": "jungle_opponents",
+        "MID": "mid_opponents",
+        "ADC": "adc_opponents",
+        "SUPPORT": "support_opponents",
+    }
+
+    # Add a 'role' column to heatmap_data if it does not exist
+    if "role" not in heatmap_data.columns:
+        heatmap_data["role"] = heatmap_data["lane_opponent"].apply(
+            lambda opponent: role_map.get(opponent.upper(), "UNKNOWN")
+        )
+
+    # Filter data for the selected champion, role, and minimum games
     updated_data = heatmap_data[
         (heatmap_data['champion'] == selected_champion) &
+        (heatmap_data['role'] == selected_role) &  # Filter for the selected role
         (heatmap_data['n_games'] >= min_games)
     ]
 
-    # Make new normalized columns for the updated data
-    updated_data['normalized_turret_plates_taken'] = (updated_data['turret_plates_taken'] - updated_data['turret_plates_taken'].min()) / (updated_data['turret_plates_taken'].max() - updated_data['turret_plates_taken'].min())
-    updated_data['normalized_solo_kills'] = (updated_data['solo_kills'] - updated_data['solo_kills'].min()) / (updated_data['solo_kills'].max() - updated_data['solo_kills'].min())
-    updated_data['normalized_deaths'] = (updated_data['deaths'] - updated_data['deaths'].min()) / (updated_data['deaths'].max() - updated_data['deaths'].min())
-    updated_data['normalized_max_level_lead_lane_opponent'] = (updated_data['max_level_lead_lane_opponent'] - updated_data['max_level_lead_lane_opponent'].min()) / (updated_data['max_level_lead_lane_opponent'].max() - updated_data['max_level_lead_lane_opponent'].min())
-    updated_data['normalized_max_cs_advantage_on_lane_opponent'] = (updated_data['max_cs_advantage_on_lane_opponent'] - updated_data['max_cs_advantage_on_lane_opponent'].min()) / (updated_data['max_cs_advantage_on_lane_opponent'].max() - updated_data['max_cs_advantage_on_lane_opponent'].min())
-    updated_data['normalized_lane_minions_first_10_minutes'] = (updated_data['lane_minions_first_10_minutes'] - updated_data['lane_minions_first_10_minutes'].min()) / (updated_data['lane_minions_first_10_minutes'].max() - updated_data['lane_minions_first_10_minutes'].min())
-    updated_data['normalized_winrate'] = (updated_data['winrate'] - updated_data['winrate'].min()) / (updated_data['winrate'].max() - updated_data['winrate'].min())
+    # Normalize the required columns for updated data
+    metrics_to_normalize = [
+        "normalized_winrate",
+        "normalized_lane_minions_first_10_minutes",
+        "normalized_max_cs_advantage_on_lane_opponent",
+        "normalized_max_level_lead_lane_opponent",
+        "normalized_turret_plates_taken",
+        "normalized_solo_kills",
+        "normalized_deaths",
+    ]
+    for metric in metrics_to_normalize:
+        metric_raw = metric.replace("normalized_", "")
+        if metric_raw in updated_data:
+            updated_data[metric] = (
+                updated_data[metric_raw] - updated_data[metric_raw].min()
+            ) / (updated_data[metric_raw].max() - updated_data[metric_raw].min())
 
     # Invert deaths for better visualization
     updated_data['normalized_deaths'] = 1 - updated_data['normalized_deaths']
-
-    # # Normalize around the mean 
-    # updated_data['normalized_turret_plates_taken'] = (updated_data['turret_plates_taken'] - updated_data['turret_plates_taken'].mean()) / updated_data['turret_plates_taken'].std()
-    # updated_data['normalized_solo_kills'] = (updated_data['solo_kills'] - updated_data['solo_kills'].mean()) / updated_data['solo_kills'].std()
-    # updated_data['normalized_deaths'] = (updated_data['deaths'] - updated_data['deaths'].mean()) / updated_data['deaths'].std()
-    # updated_data['normalized_max_level_lead_lane_opponent'] = (updated_data['max_level_lead_lane_opponent'] - updated_data['max_level_lead_lane_opponent'].mean()) / updated_data['max_level_lead_lane_opponent'].std()
-    # updated_data['normalized_max_cs_advantage_on_lane_opponent'] = (updated_data['max_cs_advantage_on_lane_opponent'] - updated_data['max_cs_advantage_on_lane_opponent'].mean()) / updated_data['max_cs_advantage_on_lane_opponent'].std()
-    # updated_data['normalized_lane_minions_first_10_minutes'] = (updated_data['lane_minions_first_10_minutes'] - updated_data['lane_minions_first_10_minutes'].mean()) / updated_data['lane_minions_first_10_minutes'].std()
-    # updated_data['normalized_winrate'] = (updated_data['winrate'] - updated_data['winrate'].mean()) / updated_data['winrate'].std()
-
-
-    # updated_data['normalized_turret_plates_taken'] = updated_data['turret_plates_taken']
-    # updated_data['normalized_solo_kills'] = updated_data['solo_kills']
-    # updated_data['normalized_deaths'] = updated_data['deaths']
-    # updated_data['normalized_max_level_lead_lane_opponent'] = updated_data['max_level_lead_lane_opponent']
-    # updated_data['normalized_max_cs_advantage_on_lane_opponent'] = updated_data['max_cs_advantage_on_lane_opponent']
-    # updated_data['normalized_lane_minions_first_10_minutes'] = updated_data['lane_minions_first_10_minutes']
-    # updated_data['normalized_winrate'] = updated_data['winrate']
 
     # Sort the data by the selected metric
     updated_data = updated_data.sort_values(by=selected_sort_metric, ascending=False)
@@ -774,38 +781,19 @@ def update_heatmap(attr, old, new):
     # Populate the new data source with normalized values for metrics
     for metric, label in zip(metrics, metric_labels):
         raw_metric = raw_metric_map[label]
-        if metric == "winrate":
-            for _, row in updated_data.iterrows():
-                new_source_data["lane_opponent"].append(row["lane_opponent"])
-                new_source_data["metric"].append(label)
-                new_source_data["value"].append(row["winrate"])  # Already normalized
-                new_source_data["raw_value"].append(row["winrate"])  # Raw value for tooltip
-                new_source_data["n_games"].append(row["n_games"])
-        else:
-            metric_min = updated_data[metric].min()
-            metric_max = updated_data[metric].max()
-
-            # Avoid divide-by-zero errors during normalization
-            if metric_max > metric_min:
-                updated_data[metric] = (
-                    (updated_data[metric] - metric_min) / (metric_max - metric_min)
-                )
-            else:
-                updated_data[metric] = 0.5  # Neutral value for identical min/max
-
-            for _, row in updated_data.iterrows():
-                new_source_data["lane_opponent"].append(row["lane_opponent"])
-                new_source_data["metric"].append(label)
-                new_source_data["value"].append(row[metric])  # Normalized value
-                new_source_data["raw_value"].append(row[raw_metric])  # Raw value for tooltip
-                new_source_data["n_games"].append(row["n_games"])
+        for _, row in updated_data.iterrows():
+            new_source_data["lane_opponent"].append(row["lane_opponent"])
+            new_source_data["metric"].append(label)
+            new_source_data["value"].append(row[metric])  # Normalized value
+            new_source_data["raw_value"].append(row[raw_metric])  # Raw value for tooltip
+            new_source_data["n_games"].append(row["n_games"])
 
     # Update the source data for the heatmap
     source.data = new_source_data
 
     # Dynamically update the y_range of the heatmap
     heatmap_plot.y_range.factors = list(reversed(updated_data['lane_opponent'].unique()))
-    heatmap_plot.title.text = f"Performance Metrics Against {role_select.value} Enemies as {selected_champion} ({role_select.value}) - Color Ranked by Normalized Values"
+    heatmap_plot.title.text = f"Performance Metrics Against {selected_role} Enemies as {selected_champion} ({selected_role}) - Color Ranked by Normalized Values"
 
     # Update the heatmap's fill_color dynamically
     heatmap_renderer.glyph.fill_color = {"field": "value", "transform": color_mappers[selected_sort_metric]}
@@ -876,8 +864,8 @@ def create_population_pyramid():
     # Create the figure
     p = figure(
         title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Showing Items With at Least 3% Frequency",
-        height=400,
-        width=750,
+        height=250,
+        width=650,
         x_range=(-100, 100),
         y_range=list(sorted_items),
         y_axis_label="",
@@ -1034,6 +1022,8 @@ sort_criterion_select.on_change("value", update_population_pyramid)
 #Heatmap specific callbacks
 sort_select.on_change("value", update_heatmap)
 min_games_input.on_change("value", update_heatmap)
+role_select.on_change("value", update_heatmap)
+
 
 # -------------------------------------------------------------------------------- #
 # Final Application Setup                                                          #
