@@ -12,6 +12,7 @@ from bokeh.models.dom import HTML
 from bokeh.models.glyphs import Rect, Line
 import requests
 import plotly.express as px
+from bokeh.models import TapTool
 
 # -------------------------------------------------------------------------------- #
 # Data Loading and Initialization                                                  #
@@ -455,8 +456,30 @@ def update_winrate_plot_with_filters(attr, old, new):
     winrate_plot.x_range.factors = list(combined['enemy_champion'])
     winrate_plot.title.text = f"Win Rate Against Enemies as {champion_select.value} ({role_select.value}) - Showing Best and Worst Matchups"
 
+    tap_tool = TapTool()
+    winrate_plot.add_tools(tap_tool)
+
     avg_win_rate_line.location = overall_avg_win_rate
 
+
+def on_bar_click(attr, old, new):
+    """
+    Callback for when a bar is clicked on the winrate plot.
+    Updates the enemy_champion_select widget to the clicked enemy champion.
+    """
+    # Get the index of the selected bar
+    selected_index = winrate_source.selected.indices
+
+    # Ensure something is selected
+    if selected_index:
+        index = selected_index[0]  # Get the first selected index
+        clicked_champion = winrate_source.data['enemy_champion'][index]  # Retrieve the clicked champion
+
+        # Update the dropdown value programmatically
+        enemy_champion_select.value = clicked_champion
+
+    # Clear the selection to avoid visual artifacts
+    winrate_source.selected.indices = []
 
 # Initialize the plot
 winrate_plot, avg_win_rate_line = create_winrate_plot()
@@ -844,6 +867,25 @@ def update_heatmap(attr, old, new):
     # Update the color bar to reflect the selected metric's color mapping
     color_bar.color_mapper = color_mappers[selected_sort_metric]
 
+    tap_tool = TapTool()
+    heatmap_plot.add_tools(tap_tool)
+
+def on_heatmap_row_click(attr, old, new):
+    """
+    Callback for when a row (cell) in the heatmap is clicked.
+    Updates the enemy_champion_select widget to the clicked lane opponent.
+    """
+    selected_index = source.selected.indices  # Get the selected indices
+
+    if selected_index:  # Ensure something is selected
+        index = selected_index[0]  # Get the first selected index
+        clicked_opponent = source.data['lane_opponent'][index]  # Retrieve the opponent name
+
+        # Update the dropdown value programmatically
+        enemy_champion_select.value = clicked_opponent
+
+    # Clear the selection to avoid visual artifacts
+    source.selected.indices = []
 
 
 # -------------------------------------------------------------------------------- #
@@ -1053,6 +1095,7 @@ role_select.on_change("value", update_enemy_champion_options)
 
 enemy_role_select.on_change("value", update_winrate_plot_with_filters)
 
+winrate_source.selected.on_change('indices', on_bar_click)
 
 # Ally-specific callbacks
 ally_min_games_input.on_change("value", update_ally_synergy_plot)
@@ -1069,6 +1112,7 @@ sort_select.on_change("value", update_row_highlight)  # Ensure highlight box fol
 enemy_champion_select.on_change("value", update_row_highlight)  # Update highlight on enemy selection
 min_games_input.on_change("value", update_heatmap)
 
+source.selected.on_change('indices', on_heatmap_row_click)
 
 
 
