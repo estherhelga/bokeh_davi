@@ -493,6 +493,9 @@ def calculate_ally_synergies(champion: str, role: str, ally_role: str) -> pd.Dat
     if not ally_column:
         return pd.DataFrame()
 
+    # Exclude rows where the selected champion appears in the ally column
+    filtered_df = filtered_df[filtered_df[ally_column] != champion]    
+
     # Aggregate win rates and game counts
     combined_df = filtered_df[['win', ally_column]].rename(columns={ally_column: 'ally_champion'})
     win_rates = (
@@ -560,6 +563,7 @@ def update_ally_synergy_plot_on_role(attr, old, new):
         ally_synergy_plot.x_range.factors = []
         ally_synergy_plot.title.text = f"No synergies available for same role ({ally_role})."
         return
+    
 
     ally_data = calculate_ally_synergies(
         champion=champion_select.value,
