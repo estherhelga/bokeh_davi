@@ -18,6 +18,14 @@ from bokeh.models import TapTool
 # Data Loading and Initialization                                                  #
 # -------------------------------------------------------------------------------- #
 
+# Load the item JSON from the URL
+item_json_url = "https://ddragon.leagueoflegends.com/cdn/14.20.1/data/en_US/item.json"
+item_response = requests.get(item_json_url)
+item_data = item_response.json()
+
+# Create a mapping of item names to their IDs
+item_name_to_id = {item['name']: item_id for item_id, item in item_data['data'].items()}
+
 # Load data with error handling
 try:
     file_path = 'cleaned_data.csv'
@@ -128,6 +136,15 @@ except pd.errors.ParserError as e:
 # -------------------------------------------------------------------------------- #
 # Supporting Functions                                                             #
 # -------------------------------------------------------------------------------- #
+
+def add_item_image_urls(pyramid_data):
+    """
+    Add item image URLs to the population pyramid data based on item names.
+    """
+    pyramid_data['image_url'] = pyramid_data['item_name'].apply(
+        lambda name: f"https://ddragon.leagueoflegends.com/cdn/14.20.1/img/item/{item_name_to_id.get(name, 'default')}.png"
+    )
+    return pyramid_data
 
 def calculate_overall_win_rate(champion: str) -> float:
     """
@@ -1005,6 +1022,9 @@ def create_population_pyramid():
     # Negate frequency values for left-side rendering
     merged_data['frequency_percentage_neg'] = -merged_data['frequency_percentage']
 
+    # Add item image URLs
+    merged_data = add_item_image_urls(merged_data)
+
     # Create a ColumnDataSource
     source = ColumnDataSource(merged_data)
 
@@ -1038,13 +1058,20 @@ def create_population_pyramid():
         source=source,
     )
 
-    # Add HoverTool
+    # Add HoverTool with images
     hover = HoverTool(
-        tooltips=[
-            ("Item", "@item_name"),
-            ("Frequency (%)", "@frequency_percentage"),
-            ("Win Rate (%)", "@win_rate"),
-        ]
+        tooltips="""
+        <div style="display: flex; align-items: center;">
+            <div>
+                <img src="@image_url" style="width: 50px; height: 50px; margin-right: 10px; border-radius: 5px;">
+            </div>
+            <div>
+                <span style="font-size: 14px; font-weight: bold;">@item_name</span><br>
+                Frequency: <span style="font-size: 12px;">@frequency_percentage%</span><br>
+                Win Rate: <span style="font-size: 12px;">@win_rate%</span>
+            </div>
+        </div>
+        """
     )
     p.add_tools(hover)
 
@@ -1058,6 +1085,7 @@ def create_population_pyramid():
     p.legend.visible = False
 
     return p
+
 
 
 
