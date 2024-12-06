@@ -732,6 +732,7 @@ source = ColumnDataSource(data={
     "value": [],
     "raw_value": [],
     "n_games": [],
+    "image_url": [],  # Include image_url in the initial data
 })
 
 # Create Heatmap Figure
@@ -817,13 +818,20 @@ heatmap_plot.add_layout(color_bar, "right")
 
 # Add HoverTool for interactivity
 hover = HoverTool(
-    tooltips=[
-        ("Metric", "@metric"),
-        ("Opponent", "@lane_opponent"),
-        ("Normalized Value", "@value{0.2f}"),
-        ("Mean Value", "@raw_value{0.2f}"),
-        ("Number of Games", "@n_games"),
-    ]
+    tooltips="""
+    <div style="display: flex; align-items: center;">
+        <div>
+            <img src="@image_url" style="width: 50px; height: 50px; margin-right: 10px; border-radius: 5px;">
+        </div>
+        <div>
+            <span style="font-size: 14px; font-weight: bold;">@lane_opponent</span><br>
+            Metric: <span style="font-size: 12px;">@metric</span><br>
+            Normalized Value: <span style="font-size: 12px;">@value{0.2f}</span><br>
+            Raw Value: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
+            Games Played: <span style="font-size: 12px;">@n_games</span>
+        </div>
+    </div>
+    """
 )
 heatmap_plot.add_tools(hover)
 
@@ -871,16 +879,21 @@ def update_heatmap(attr, old, new):
     ]
     for metric in metrics_to_normalize:
         metric_raw = metric.replace("normalized_", "")
-        if metric_raw in updated_data:
-            updated_data[metric] = (
+        if metric_raw in updated_data.columns:
+            updated_data.loc[:, metric] = (
                 updated_data[metric_raw] - updated_data[metric_raw].min()
             ) / (updated_data[metric_raw].max() - updated_data[metric_raw].min())
 
     # Invert deaths for better visualization
-    updated_data['normalized_deaths'] = 1 - updated_data['normalized_deaths']
+    updated_data.loc[:, 'normalized_deaths'] = 1 - updated_data['normalized_deaths']
 
     # Sort the data by the selected metric
     updated_data = updated_data.sort_values(by=selected_sort_metric, ascending=False)
+
+    # Add image URLs
+    updated_data['image_url'] = updated_data['lane_opponent'].apply(
+        lambda x: f"http://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/{x}.png"
+    )
 
     # Prepare new source data
     new_source_data = {
@@ -889,6 +902,7 @@ def update_heatmap(attr, old, new):
         "value": [],
         "raw_value": [],
         "n_games": [],
+        "image_url": [],  # Add image URLs
     }
 
     # Populate the new data source with normalized values for metrics
@@ -900,6 +914,7 @@ def update_heatmap(attr, old, new):
             new_source_data["value"].append(row[metric])  # Normalized value
             new_source_data["raw_value"].append(row[raw_metric])  # Raw value for tooltip
             new_source_data["n_games"].append(row["n_games"])
+            new_source_data["image_url"].append(row["image_url"])  # Image URL
 
     # Update the source data for the heatmap
     source.data = new_source_data
