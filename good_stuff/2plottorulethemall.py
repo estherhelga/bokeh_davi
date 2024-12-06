@@ -420,6 +420,11 @@ def update_winrate_plot_with_filters(attr, old, new):
     win_rates['win_rate_percent'] = (win_rates['win_rate'] * 100).round(2)
     win_rates = win_rates[win_rates['n_games'] >= min_games]
 
+    # Add image URLs
+    win_rates['image_url'] = win_rates['enemy_champion'].apply(
+        lambda x: f"http://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/{x}.png"
+    )
+
     # Sort and assign colors/hatches
     win_rates_sorted = win_rates.sort_values(by="win_rate", ascending=False)
     top_5 = win_rates_sorted.head(5).copy()
@@ -458,6 +463,22 @@ def update_winrate_plot_with_filters(attr, old, new):
 
     tap_tool = TapTool()
     winrate_plot.add_tools(tap_tool)
+
+    hover = HoverTool(
+        tooltips="""
+        <div style="display: flex; align-items: center;">
+            <div>
+                <img src="@image_url" style="width: 50px; height: 50px; margin-right: 10px; border-radius: 5px;">
+            </div>
+            <div>
+                <span style="font-size: 14px; font-weight: bold;">@enemy_champion</span><br>
+                Win Rate: <span style="font-size: 12px;">@win_rate_percent%</span><br>
+                Games Played: <span style="font-size: 12px;">@n_games</span>
+            </div>
+        </div>
+        """
+    )
+    winrate_plot.add_tools(hover)
 
     avg_win_rate_line.location = overall_avg_win_rate
 
@@ -568,6 +589,11 @@ def update_ally_synergy_plot(attr, old, new):
         lambda x: '#2b93b6' if x >= overall_winrate else '#e54635'
     )
 
+    # Add image URLs dynamically
+    ally_data['image_url'] = ally_data['ally_champion'].apply(
+        lambda x: f"http://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/{x}.png"
+    )
+
     # Update the plot with sorted data
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
@@ -604,10 +630,31 @@ def update_ally_synergy_plot_on_role(attr, old, new):
         lambda x: '#2b93b6' if x >= overall_winrate else '#e54635'
     )
 
+    # Add image URLs
+    ally_data['image_url'] = ally_data['ally_champion'].apply(
+        lambda x: f"http://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/{x}.png"
+    )
+
     # Update the plot
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
     ally_synergy_plot.title.text = f"Best {ally_role_select.value} Allies for {champion_select.value} ({role_select.value})"
+
+    hover = HoverTool(
+        tooltips="""
+        <div style="display: flex; align-items: center;">
+            <div>
+                <img src="@image_url" style="width: 50px; height: 50px; margin-right: 10px; border-radius: 5px;">
+            </div>
+            <div>
+                <span style="font-size: 14px; font-weight: bold;">@ally_champion</span><br>
+                Win Rate: <span style="font-size: 12px;">@win_rate_percent%</span><br>
+                Games Played: <span style="font-size: 12px;">@n_games</span>
+            </div>
+        </div>
+        """
+    )
+    ally_synergy_plot.add_tools(hover)
 
 def create_ally_synergy_plot():
     """
