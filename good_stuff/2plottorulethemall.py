@@ -638,7 +638,7 @@ def update_ally_synergy_plot_on_role(attr, old, new):
     # Update the plot
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
-    ally_synergy_plot.title.text = f"Best {ally_role_select.value} Allies for {champion_select.value} ({role_select.value})"
+    ally_synergy_plot.title.text = f"Best {ally_role_select.value} Allies for {champion_select.value} ({role_select.value}) - Showing Synergies Above Average Win Rate"
 
     hover = HoverTool(
         tooltips="""
@@ -1010,7 +1010,7 @@ def create_population_pyramid():
 
     # Create the figure
     p = figure(
-        title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Showing Items With at Least 3% Frequency",
+        title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Min. 3% Frequency Items",
         height=250,
         width=650,
         x_range=(-100, 100),
