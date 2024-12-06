@@ -686,6 +686,49 @@ heatmap_renderer = heatmap_plot.rect(
     line_color=None
 )
 
+from bokeh.models import BoxAnnotation
+
+row_highlight = BoxAnnotation(
+    top=None,
+    bottom=None,
+    fill_alpha=0.0,  # No fill
+    line_color="black",  # Black outline 
+    line_width=3  # Thick outline
+)
+heatmap_plot.add_layout(row_highlight)
+
+
+
+def update_row_highlight(attr, old, new):
+    """
+    Update the row highlight on the heatmap when a specific enemy is selected.
+    If no enemy is selected, remove the highlight.
+    """
+    # Get the currently selected enemy
+    selected_enemy = enemy_champion_select.value
+
+    if not selected_enemy:  # No enemy selected
+        row_highlight.bottom = None
+        row_highlight.top = None
+        row_highlight.line_alpha = 0.0  # Hide the outline
+        return
+
+    # Get the updated list of lane opponents from the heatmap's y-axis
+    lane_opponents = heatmap_plot.y_range.factors
+
+    if selected_enemy in lane_opponents:
+        # Map the selected category to its numeric position
+        idx = lane_opponents.index(selected_enemy) + 0.5  # Center of the row
+        row_highlight.bottom = idx - 0.5  # Bottom of the box
+        row_highlight.top = idx + 0.5    # Top of the box
+        row_highlight.line_alpha = 1.0  # Make the outline visible
+    else:  # If the selection is not in the heatmap
+        row_highlight.bottom = None
+        row_highlight.top = None
+        row_highlight.line_alpha = 0.0  # Hide the outline
+
+
+
 # Add a color bar to the heatmap
 from bokeh.models import FixedTicker, PrintfTickFormatter
 
@@ -1020,9 +1063,14 @@ ally_role_select.on_change("value", update_ally_synergy_plot_on_role)
 sort_criterion_select.on_change("value", update_population_pyramid)
 
 #Heatmap specific callbacks
-sort_select.on_change("value", update_heatmap)
+# Attach callbacks for heatmap and highlight updates
+sort_select.on_change("value", update_heatmap)  # Update heatmap data
+sort_select.on_change("value", update_row_highlight)  # Ensure highlight box follows
+enemy_champion_select.on_change("value", update_row_highlight)  # Update highlight on enemy selection
 min_games_input.on_change("value", update_heatmap)
-role_select.on_change("value", update_heatmap)
+
+
+
 
 
 # -------------------------------------------------------------------------------- #
@@ -1035,6 +1083,7 @@ update_winrate_plot_with_filters(None, None, None)
 update_ally_synergy_plot_on_role(None, None, None)
 update_heatmap(None, None, None)
 update_champion_image_and_stats(None, None, None)  # Add this to update image and stats on startup
+update_row_highlight(None, None, enemy_champion_select.value)
 
 # Add the layout to the document
 curdoc().clear()  # Clear any existing layout
