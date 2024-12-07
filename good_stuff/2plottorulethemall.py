@@ -1168,18 +1168,6 @@ def create_population_pyramid():
             </div>
         </div>
         """
-        tooltips="""
-        <div style="display: flex; align-items: center;">
-            <div>
-                <img src="@image_url" style="width: 50px; height: 50px; margin-right: 10px; border-radius: 5px;">
-            </div>
-            <div>
-                <span style="font-size: 14px; font-weight: bold;">@item_name</span><br>
-                Frequency: <span style="font-size: 12px;">@frequency_percentage%</span><br>
-                Win Rate: <span style="font-size: 12px;">@win_rate%</span>
-            </div>
-        </div>
-        """
     )
     p.add_tools(hover)
 
