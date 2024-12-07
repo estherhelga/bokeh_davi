@@ -18,6 +18,14 @@ from bokeh.models import TapTool
 # Data Loading and Initialization                                                  #
 # -------------------------------------------------------------------------------- #
 
+# Load the item JSON from the URL
+item_json_url = "https://ddragon.leagueoflegends.com/cdn/14.20.1/data/en_US/item.json"
+item_response = requests.get(item_json_url)
+item_data = item_response.json()
+
+# Create a mapping of item names to their IDs
+item_name_to_id = {item['name']: item_id for item_id, item in item_data['data'].items()}
+
 # Load data with error handling
 try:
     file_path = 'cleaned_data.csv'
@@ -125,9 +133,69 @@ except pd.errors.ParserError as e:
     raise RuntimeError(f"Error parsing CSV file {heatmap_file_path}: {e}")
 
 
+# Validate that the required new columns are present in the DataFrame
+required_columns = [
+    'overall_winrate',
+    'overall_avg_lane_minions_first_10_minutes',
+    'overall_avg_max_cs_advantage_on_lane_opponent',
+    'overall_avg_max_level_lead_lane_opponent',
+    'overall_avg_turret_plates_taken',
+    'overall_avg_solo_kills',
+    'overall_avg_deaths'
+]
+
+if not set(required_columns).issubset(heatmap_data.columns):
+    raise ValueError(f"Missing required columns in the dataset. Expected: {required_columns}")
+
+# Extract unique champions
+unique_champions = heatmap_data['champion'].unique()
+
+# Dictionary to store the overall averages for each champion
+overall_metrics_per_champion = {}
+
+# Calculate and print overall averages per champion
+for champion in unique_champions:
+    # Filter the data for the current champion
+    champion_data = heatmap_data[heatmap_data['champion'] == champion]
+    
+    # Extract the overall metrics (constant per champion)
+    if not champion_data.empty:
+        overall_metrics_per_champion[champion] = {
+            "overall_winrate": champion_data['overall_winrate'].iloc[0],
+            "avg_lane_minions_first_10_minutes": champion_data['overall_avg_lane_minions_first_10_minutes'].iloc[0],
+            "avg_max_cs_advantage_on_lane_opponent": champion_data['overall_avg_max_cs_advantage_on_lane_opponent'].iloc[0],
+            "avg_max_level_lead_lane_opponent": champion_data['overall_avg_max_level_lead_lane_opponent'].iloc[0],
+            "avg_turret_plates_taken": champion_data['overall_avg_turret_plates_taken'].iloc[0],
+            "avg_solo_kills": champion_data['overall_avg_solo_kills'].iloc[0],
+            "avg_deaths": champion_data['overall_avg_deaths'].iloc[0],
+        }
+
+        # Print the results for verification
+        print(f"Overall averages for {champion}:")
+        print(f"  - Winrate: {overall_metrics_per_champion[champion]['overall_winrate']}%")
+        print(f"  - Avg CS First 10 min: {overall_metrics_per_champion[champion]['avg_lane_minions_first_10_minutes']}")
+        print(f"  - Avg Max CS Advantage: {overall_metrics_per_champion[champion]['avg_max_cs_advantage_on_lane_opponent']}")
+        print(f"  - Avg Max Level Lead: {overall_metrics_per_champion[champion]['avg_max_level_lead_lane_opponent']}")
+        print(f"  - Avg Turret Plates Taken: {overall_metrics_per_champion[champion]['avg_turret_plates_taken']}")
+        print(f"  - Avg Solo Kills: {overall_metrics_per_champion[champion]['avg_solo_kills']}")
+        print(f"  - Avg Deaths: {overall_metrics_per_champion[champion]['avg_deaths']}")
+        print("-" * 40)
+
+# Save the overall metrics dictionary for later use
+# This dictionary can be accessed for heatmap updates or any other purpose.
+
 # -------------------------------------------------------------------------------- #
 # Supporting Functions                                                             #
 # -------------------------------------------------------------------------------- #
+
+def add_item_image_urls(pyramid_data):
+    """
+    Add item image URLs to the population pyramid data based on item names.
+    """
+    pyramid_data['image_url'] = pyramid_data['item_name'].apply(
+        lambda name: f"https://ddragon.leagueoflegends.com/cdn/14.20.1/img/item/{item_name_to_id.get(name, 'default')}.png"
+    )
+    return pyramid_data
 
 def calculate_overall_win_rate(champion: str) -> float:
     """
@@ -731,6 +799,7 @@ source = ColumnDataSource(data={
     "metric": [],
     "value": [],
     "raw_value": [],
+    "average_value": [],  # Add this for overall average values
     "n_games": [],
     "image_url": [],  # Include image_url in the initial data
 })
@@ -816,7 +885,7 @@ color_bar = ColorBar(
 heatmap_plot.add_layout(color_bar, "right")
 
 
-# Add HoverTool for interactivity
+# Update the HoverTool to include Average Metric
 hover = HoverTool(
     tooltips="""
     <div style="display: flex; align-items: center;">
@@ -828,11 +897,14 @@ hover = HoverTool(
             Metric: <span style="font-size: 12px;">@metric</span><br>
             Normalized Value: <span style="font-size: 12px;">@value{0.2f}</span><br>
             Raw Value: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
+            Average Metric: <span style="font-size: 12px;">@average_value{0.2f}</span><br>
             Games Played: <span style="font-size: 12px;">@n_games</span>
         </div>
     </div>
     """
 )
+# Replace the old HoverTool with the updated one
+heatmap_plot.tools = [tool for tool in heatmap_plot.tools if not isinstance(tool, HoverTool)]  # Remove old HoverTool
 heatmap_plot.add_tools(hover)
 
 # Update Function for Heatmap
@@ -901,18 +973,38 @@ def update_heatmap(attr, old, new):
         "metric": [],
         "value": [],
         "raw_value": [],
+        "average_value": [],  # Add this for overall average values
         "n_games": [],
         "image_url": [],  # Add image URLs
     }
 
-    # Populate the new data source with normalized values for metrics
+    # Create a mapping from normalized metrics to their corresponding overall keys
+    metric_to_overall_key = {
+        "normalized_winrate": "overall_winrate",
+        "normalized_lane_minions_first_10_minutes": "avg_lane_minions_first_10_minutes",
+        "normalized_max_cs_advantage_on_lane_opponent": "avg_max_cs_advantage_on_lane_opponent",
+        "normalized_max_level_lead_lane_opponent": "avg_max_level_lead_lane_opponent",
+        "normalized_turret_plates_taken": "avg_turret_plates_taken",
+        "normalized_solo_kills": "avg_solo_kills",
+        "normalized_deaths": "avg_deaths",
+    }
+
+    # Adjust the data preparation to use the mapping
     for metric, label in zip(metrics, metric_labels):
         raw_metric = raw_metric_map[label]
         for _, row in updated_data.iterrows():
+            champion_name = row["champion"]
+            # Use the mapping to get the correct overall key
+            overall_key = metric_to_overall_key.get(metric, None)
+            if overall_key is None:
+                continue  # Skip if no matching key is found
+            average_metric = overall_metrics_per_champion[champion_name][overall_key]
+
             new_source_data["lane_opponent"].append(row["lane_opponent"])
             new_source_data["metric"].append(label)
             new_source_data["value"].append(row[metric])  # Normalized value
             new_source_data["raw_value"].append(row[raw_metric])  # Raw value for tooltip
+            new_source_data["average_value"].append(average_metric)  # Overall average value
             new_source_data["n_games"].append(row["n_games"])
             new_source_data["image_url"].append(row["image_url"])  # Image URL
 
@@ -1005,6 +1097,9 @@ def create_population_pyramid():
     # Negate frequency values for left-side rendering
     merged_data['frequency_percentage_neg'] = -merged_data['frequency_percentage']
 
+    # Add item image URLs
+    merged_data = add_item_image_urls(merged_data)
+
     # Create a ColumnDataSource
     source = ColumnDataSource(merged_data)
 
@@ -1038,13 +1133,20 @@ def create_population_pyramid():
         source=source,
     )
 
-    # Add HoverTool
+    # Add HoverTool with images
     hover = HoverTool(
-        tooltips=[
-            ("Item", "@item_name"),
-            ("Frequency (%)", "@frequency_percentage"),
-            ("Win Rate (%)", "@win_rate"),
-        ]
+        tooltips="""
+        <div style="display: flex; align-items: center;">
+            <div>
+                <img src="@image_url" style="width: 50px; height: 50px; margin-right: 10px; border-radius: 5px;">
+            </div>
+            <div>
+                <span style="font-size: 14px; font-weight: bold;">@item_name</span><br>
+                Frequency: <span style="font-size: 12px;">@frequency_percentage%</span><br>
+                Win Rate: <span style="font-size: 12px;">@win_rate%</span>
+            </div>
+        </div>
+        """
     )
     p.add_tools(hover)
 

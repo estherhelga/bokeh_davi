@@ -34,7 +34,21 @@ aggregated_metrics = extracted_data.groupby(["champion", "enemy_1", "role"])[met
 # Merge aggregated counts with metrics
 aggregated_data = pd.merge(aggregated_counts, aggregated_metrics, on=["champion", "enemy_1", "role"])
 
-# Step 4: Normalize metrics per champion
+# Step 4: Calculate Overall Averages per Champion
+# Overall averages across all matchups for each champion
+overall_averages = extracted_data.groupby("champion").agg(
+    overall_n_games=("win", "count"),
+    overall_n_wins=("win", "sum"),
+    **{f"overall_avg_{metric}": (metric, "mean") for metric in metrics}
+).reset_index()
+
+# Add overall winrate
+overall_averages["overall_winrate"] = overall_averages["overall_n_wins"] / overall_averages["overall_n_games"]
+
+# Merge overall averages with aggregated data
+aggregated_data = pd.merge(aggregated_data, overall_averages, on="champion")
+
+# Step 5: Normalize metrics per champion
 def normalize_group(group):
     scaler = MinMaxScaler()
     normalized = scaler.fit_transform(group[metrics])
@@ -52,6 +66,6 @@ final_data["normalized_deaths"] = 1 - final_data["normalized_deaths"]
 # Rename enemy_1 column to lane_opponent
 final_data.rename(columns={"enemy_1": "lane_opponent"}, inplace=True)
 
-# Step 5: Save to CSV
+# Step 6: Save to CSV
 final_data.to_csv("heatmap_data.csv", index=False)
 print("Processed data saved to heatmap_data.csv")
