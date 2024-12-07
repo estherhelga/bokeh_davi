@@ -26,6 +26,14 @@ item_data = item_response.json()
 # Create a mapping of item names to their IDs
 item_name_to_id = {item['name']: item_id for item_id, item in item_data['data'].items()}
 
+# Load the item JSON from the URL
+item_json_url = "https://ddragon.leagueoflegends.com/cdn/14.20.1/data/en_US/item.json"
+item_response = requests.get(item_json_url)
+item_data = item_response.json()
+
+# Create a mapping of item names to their IDs
+item_name_to_id = {item['name']: item_id for item_id, item in item_data['data'].items()}
+
 # Load data with error handling
 try:
     file_path = 'cleaned_data.csv'
@@ -187,6 +195,15 @@ for champion in unique_champions:
 # -------------------------------------------------------------------------------- #
 # Supporting Functions                                                             #
 # -------------------------------------------------------------------------------- #
+
+def add_item_image_urls(pyramid_data):
+    """
+    Add item image URLs to the population pyramid data based on item names.
+    """
+    pyramid_data['image_url'] = pyramid_data['item_name'].apply(
+        lambda name: f"https://ddragon.leagueoflegends.com/cdn/14.20.1/img/item/{item_name_to_id.get(name, 'default')}.png"
+    )
+    return pyramid_data
 
 def add_item_image_urls(pyramid_data):
     """
@@ -706,7 +723,7 @@ def update_ally_synergy_plot_on_role(attr, old, new):
     # Update the plot
     ally_synergy_source.data = ally_data.to_dict(orient='list')
     ally_synergy_plot.x_range.factors = list(ally_data['ally_champion'])
-    ally_synergy_plot.title.text = f"Best {ally_role_select.value} Allies for {champion_select.value} ({role_select.value})"
+    ally_synergy_plot.title.text = f"Best {ally_role_select.value} Allies for {champion_select.value} ({role_select.value}) - Showing Synergies Above Average Win Rate"
 
     hover = HoverTool(
         tooltips="""
@@ -894,7 +911,7 @@ hover = HoverTool(
         </div>
         <div>
             <span style="font-size: 14px; font-weight: bold;">@lane_opponent</span><br>
-            Metric: <span style="font-size: 12px;">@metric</span><br>
+            @metric: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
             Normalized Value: <span style="font-size: 12px;">@value{0.2f}</span><br>
             Raw Value: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
             Average Metric: <span style="font-size: 12px;">@average_value{0.2f}</span><br>
@@ -1100,12 +1117,15 @@ def create_population_pyramid():
     # Add item image URLs
     merged_data = add_item_image_urls(merged_data)
 
+    # Add item image URLs
+    merged_data = add_item_image_urls(merged_data)
+
     # Create a ColumnDataSource
     source = ColumnDataSource(merged_data)
 
     # Create the figure
     p = figure(
-        title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Showing Items With at Least 3% Frequency",
+        title=f"Item Win Rate and Frequency for {champion_name} ({role_select.value}) - Min. 3% Frequency Items",
         height=250,
         width=650,
         x_range=(-100, 100),
@@ -1134,7 +1154,20 @@ def create_population_pyramid():
     )
 
     # Add HoverTool with images
+    # Add HoverTool with images
     hover = HoverTool(
+        tooltips="""
+        <div style="display: flex; align-items: center;">
+            <div>
+                <img src="@image_url" style="width: 50px; height: 50px; margin-right: 10px; border-radius: 5px;">
+            </div>
+            <div>
+                <span style="font-size: 14px; font-weight: bold;">@item_name</span><br>
+                Frequency: <span style="font-size: 12px;">@frequency_percentage%</span><br>
+                Win Rate: <span style="font-size: 12px;">@win_rate%</span>
+            </div>
+        </div>
+        """
         tooltips="""
         <div style="display: flex; align-items: center;">
             <div>
@@ -1160,6 +1193,7 @@ def create_population_pyramid():
     p.legend.visible = False
 
     return p
+
 
 
 
