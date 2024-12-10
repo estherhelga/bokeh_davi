@@ -13,6 +13,7 @@ from bokeh.models.glyphs import Rect, Line
 import requests
 import plotly.express as px
 from bokeh.models import TapTool
+from bokeh.models import Slider
 
 # -------------------------------------------------------------------------------- #
 # Data Loading and Initialization                                                  #
@@ -376,6 +377,8 @@ enemy_roles = ["ANY", "TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]
 enemy_role_select = Select(title="Enemy Role:", value="TOP", options=enemy_roles, width=100)
 enemy_champion_select = Select(title="Specific Enemy:", value="", options=[], width=100)
 min_games_input = TextInput(title="Minimum Games:", value="50", width=100)
+# Add a slider to control the number of top and bottom enemies to show
+top_bottom_slider = Slider(title="Top/Bottom Enemies to Show", start=1, end=100, value=5, step=1, width=200)
 
 # Ally-specific widgets
 ally_role_select = Select(title="Ally Role:", value="JUNGLE", options=roles, width=100)
@@ -448,12 +451,7 @@ def create_winrate_plot():
 
     return p, avg_win_rate_line
 
-
 def update_winrate_plot_with_filters(attr, old, new):
-    """
-    Update the Win Rate plot based on filters.
-    Always highlight the selected enemy, whether it is already in the graph or not.
-    """
     global overall_avg_win_rate
 
     # Calculate overall win rate for the selected champion
@@ -502,6 +500,14 @@ def update_winrate_plot_with_filters(attr, old, new):
     win_rates['win_rate_percent'] = (win_rates['win_rate'] * 100).round(2)
     win_rates = win_rates[win_rates['n_games'] >= min_games]
 
+    # Dynamically adjust the slider's range based on unique enemy champions
+    num_unique_enemies = len(win_rates['enemy_champion'].unique())
+    max_top_bottom = max(1, num_unique_enemies // 2)  # Ensure at least 1 is allowed
+    top_bottom_slider.end = max_top_bottom  # Update the slider's maximum value
+
+    # Get the slider's value for top/bottom enemies to show
+    num_top_bottom = min(top_bottom_slider.value, max_top_bottom)  # Constrain slider value within range
+
     # Add image URLs
     win_rates['image_url'] = win_rates['enemy_champion'].apply(
         lambda x: f"http://ddragon.leagueoflegends.com/cdn/14.20.1/img/champion/{x}.png"
@@ -509,16 +515,16 @@ def update_winrate_plot_with_filters(attr, old, new):
 
     # Sort and assign colors/hatches
     win_rates_sorted = win_rates.sort_values(by="win_rate", ascending=False)
-    top_5 = win_rates_sorted.head(5).copy()
-    bottom_5 = win_rates_sorted.tail(5).copy()
+    top_n = win_rates_sorted.head(num_top_bottom).copy()  # Use slider value
+    bottom_n = win_rates_sorted.tail(num_top_bottom).copy()  # Use slider value
 
-    top_5['color'] = '#2b93b6'  # Blue for top matchups
-    bottom_5['color'] = '#e54635'  # Red for bottom matchups
-    top_5['hatch'] = ''
-    bottom_5['hatch'] = ''
+    top_n['color'] = '#2b93b6'  # Blue for top matchups
+    bottom_n['color'] = '#e54635'  # Red for bottom matchups
+    top_n['hatch'] = ''
+    bottom_n['hatch'] = ''
 
-    # Combine top and bottom 5 into a single dataset
-    combined = pd.concat([top_5, bottom_5]).drop_duplicates(subset=['enemy_champion'])
+    # Combine top and bottom n into a single dataset
+    combined = pd.concat([top_n, bottom_n]).drop_duplicates(subset=['enemy_champion'])
 
     # Handle specific enemy selection
     if selected_enemy:
@@ -1214,8 +1220,8 @@ selectors_with_info = row(
 
 # Update the winrate section layout
 winrate_section = column(
-    selectors_with_info,  # Updated layout with image and stats
-    row(enemy_role_select, min_games_input, enemy_champion_select),
+    selectors_with_info,
+    row(enemy_role_select, min_games_input, enemy_champion_select, top_bottom_slider),
     winrate_plot
 )
 
@@ -1284,6 +1290,8 @@ enemy_role_select.on_change("value", update_winrate_plot_with_filters)
 
 winrate_source.selected.on_change('indices', on_bar_click)
 
+top_bottom_slider.on_change("value", update_winrate_plot_with_filters)
+
 # Ally-specific callbacks
 ally_min_games_input.on_change("value", update_ally_synergy_plot)
 ally_role_select.on_change("value", update_ally_synergy_plot_on_role)
@@ -1310,6 +1318,7 @@ source.selected.on_change('indices', on_heatmap_row_click)
 
 # Perform initial updates to ensure the application is initialized
 update_enemy_champion_options(None, None, None)
+update_winrate_plot_with_filters(None, None, None)
 update_winrate_plot_with_filters(None, None, None)
 update_ally_synergy_plot_on_role(None, None, None)
 update_heatmap(None, None, None)
