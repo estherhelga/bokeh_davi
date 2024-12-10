@@ -13,6 +13,7 @@ from bokeh.models.glyphs import Rect, Line
 import requests
 import plotly.express as px
 from bokeh.models import TapTool
+from bokeh.models import Slider
 
 # -------------------------------------------------------------------------------- #
 # Data Loading and Initialization                                                  #
@@ -376,6 +377,15 @@ enemy_roles = ["ANY", "TOP", "JUNGLE", "MID", "ADC", "SUPPORT"]
 enemy_role_select = Select(title="Enemy Role:", value="TOP", options=enemy_roles, width=100)
 enemy_champion_select = Select(title="Specific Enemy:", value="", options=[], width=100)
 min_games_input = TextInput(title="Minimum Games:", value="50", width=100)
+# Slider to control the number of champions displayed
+num_champions_slider = Slider(
+    title="Number of Champions to Show", 
+    start=1, 
+    end=10,  # Initial range; will be updated dynamically
+    value=5,  # Default value
+    step=1, 
+    width=300
+)
 
 # Ally-specific widgets
 ally_role_select = Select(title="Ally Role:", value="JUNGLE", options=roles, width=100)
@@ -407,7 +417,7 @@ def create_winrate_plot():
     bars = p.vbar(
         x='enemy_champion',
         top='win_rate_percent',
-        width=0.5,
+        width=0.62,
         source=winrate_source,
         line_color="white",
         fill_color='color',
@@ -427,9 +437,6 @@ def create_winrate_plot():
     p.yaxis.axis_label = "Win Rate (%)"
     p.xaxis.major_label_orientation = 0.785
 
-    # Add a hover tool for the bars
-    hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games"), ("Enemy", "@enemy_champion")])
-    p.add_tools(hover)
 
     # Add invisible glyphs for legend entries
     above_avg_glyph = p.vbar(x=[0], top=[1], fill_color='#2b93b6', line_color='white', width=0.1, visible=False)
@@ -572,20 +579,23 @@ def on_bar_click(attr, old, new):
     """
     Callback for when a bar is clicked on the winrate plot.
     Updates the enemy_champion_select widget to the clicked enemy champion.
+    If the clicked champion is already selected, clears the selection.
     """
-    # Get the index of the selected bar
     selected_index = winrate_source.selected.indices
 
-    # Ensure something is selected
-    if selected_index:
+    if selected_index:  # Ensure something is selected
         index = selected_index[0]  # Get the first selected index
         clicked_champion = winrate_source.data['enemy_champion'][index]  # Retrieve the clicked champion
 
-        # Update the dropdown value programmatically
-        enemy_champion_select.value = clicked_champion
+        # Check if the clicked champion is already selected
+        if enemy_champion_select.value == clicked_champion:
+            enemy_champion_select.value = ""  # Clear the selection
+        else:
+            enemy_champion_select.value = clicked_champion  # Update the dropdown
 
     # Clear the selection to avoid visual artifacts
     winrate_source.selected.indices = []
+
 
 # Initialize the plot
 winrate_plot, avg_win_rate_line = create_winrate_plot()
@@ -752,7 +762,7 @@ def create_ally_synergy_plot():
     p.vbar(
         x='ally_champion',
         top='win_rate_percent',
-        width=0.5,
+        width=0.62,
         source=ally_synergy_source,
         line_color="white",
         fill_color='color',
@@ -761,9 +771,6 @@ def create_ally_synergy_plot():
         hatch_alpha=0.5,
         hatch_weight=2
     )
-
-    hover = HoverTool(tooltips=[("Win Rate", "@win_rate_percent%"), ("Games Played", "@n_games"), ("Ally", "@ally_champion")])
-    p.add_tools(hover)
 
     p.y_range.start = 0
     p.y_range.end = 100
@@ -912,9 +919,8 @@ hover = HoverTool(
         <div>
             <span style="font-size: 14px; font-weight: bold;">@lane_opponent</span><br>
             @metric: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
+            Average @metric: <span style="font-size: 12px;">@average_value{0.2f}</span><br>
             Normalized Value: <span style="font-size: 12px;">@value{0.2f}</span><br>
-            Raw Value: <span style="font-size: 12px;">@raw_value{0.2f}</span><br>
-            Average Metric: <span style="font-size: 12px;">@average_value{0.2f}</span><br>
             Games Played: <span style="font-size: 12px;">@n_games</span>
         </div>
     </div>
@@ -1045,6 +1051,7 @@ def on_heatmap_row_click(attr, old, new):
     """
     Callback for when a row (cell) in the heatmap is clicked.
     Updates the enemy_champion_select widget to the clicked lane opponent.
+    If the clicked opponent is already selected, clears the selection.
     """
     selected_index = source.selected.indices  # Get the selected indices
 
@@ -1052,11 +1059,15 @@ def on_heatmap_row_click(attr, old, new):
         index = selected_index[0]  # Get the first selected index
         clicked_opponent = source.data['lane_opponent'][index]  # Retrieve the opponent name
 
-        # Update the dropdown value programmatically
-        enemy_champion_select.value = clicked_opponent
+        # Check if the clicked opponent is already selected
+        if enemy_champion_select.value == clicked_opponent:
+            enemy_champion_select.value = ""  # Clear the selection
+        else:
+            enemy_champion_select.value = clicked_opponent  # Update the dropdown
 
     # Clear the selection to avoid visual artifacts
     source.selected.indices = []
+
 
 
 # -------------------------------------------------------------------------------- #
@@ -1070,8 +1081,8 @@ def create_population_pyramid():
         bokeh.plotting.figure: Configured Population Pyramid figure.
     """
     # Colors for the bars
-    selected_blue_color = "#2B93B6"
-    non_selected_gray_color = "#7F7F7F"
+    selected_blue_color = "#886D76"
+    non_selected_gray_color = "#969696"
 
     # Extract settings
     champion_name = champion_select.value
